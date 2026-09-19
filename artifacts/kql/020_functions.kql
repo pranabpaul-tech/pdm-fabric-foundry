@@ -13,8 +13,8 @@
 // Kill switch read by alert rules: alerts are ON unless the latest
 // pdm_config row for 'alerts_enabled' says 'false'.
 .create-or-alter function with (folder = 'ops') fn_alerts_enabled() {
-    let latest = toscalar(pdm_config | where key == 'alerts_enabled' | top 1 by ts desc | project tolower(value));
-    isnull(latest) or latest != 'false'
+    let cur_value = toscalar(pdm_config | where key == 'alerts_enabled' | top 1 by ts desc | project tolower(value));
+    isnull(cur_value) or cur_value != 'false'
 }
 
 // Latest state per asset — the "live asset state" the agent and dashboard read.

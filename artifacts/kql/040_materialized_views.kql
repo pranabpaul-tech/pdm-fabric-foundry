@@ -3,13 +3,13 @@
 .create-or-alter materialized-view with (backfill = true) mv_asset_1m on table telemetry_enriched {
     telemetry_enriched
     | summarize avg_vib = avg(vibration_rms), max_vib = max(vibration_rms), avg_temp = avg(temp_c),
-                avg_cur = avg(current_a), avg_press = avg(pressure_bar), cycles = max(cycle_count), n = count()
+                avg_cur = avg(current_a), avg_press = avg(pressure_bar), cycle_max = max(cycle_count), n = count()
       by asset_id, bin(ts, 1m)
 }
 
 .create-or-alter materialized-view with (backfill = true) mv_asset_1h on table telemetry_enriched {
     telemetry_enriched
     | summarize avg_vib = avg(vibration_rms), max_vib = max(vibration_rms), avg_temp = avg(temp_c),
-                avg_cur = avg(current_a), avg_press = avg(pressure_bar), cycles = max(cycle_count), n = count()
+                avg_cur = avg(current_a), avg_press = avg(pressure_bar), cycle_max = max(cycle_count), n = count()
       by asset_id, bin(ts, 1h)
 }

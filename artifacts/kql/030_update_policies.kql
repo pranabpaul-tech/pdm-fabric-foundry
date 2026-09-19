@@ -1,4 +1,18 @@
-// telemetry_raw -> telemetry_enriched. Non-transactional so an enrichment
-// failure can never block raw ingestion (raw is the recovery source).
+// telemetry_raw -> telemetry_enriched.
+//
+// An update policy that references another table (fn_enrich_telemetry looks up
+// asset_dim) is REJECTED while streaming ingestion is enabled on the source table
+// ("Referencing additional tables from update policy is not allowed when streaming
+// ingestion is enabled"). Eventhouse tables have streaming ingestion on by default, so
+// turn it off for telemetry_raw and use a short batching window instead. Trade-off:
+// ~30 s ingestion latency instead of sub-second; irrelevant for 1-minute aggregates
+// and a 24-72 h prediction horizon. Sub-second scoring uses the in-Eventhouse anomaly
+// function on the aggregates, not this path.
+.alter-merge table telemetry_raw policy streamingingestion '{"IsEnabled": false}'
+
+.alter table telemetry_raw policy ingestionbatching '{"MaximumBatchingTimeSpan": "00:00:30", "MaximumNumberOfItems": 500, "MaximumRawDataSizeMB": 256}'
+
+// Non-transactional so an enrichment failure can never block raw ingestion
+// (raw is the recovery source).
 .alter table telemetry_enriched policy update
 ```[{"IsEnabled": true, "Source": "telemetry_raw", "Query": "fn_enrich_telemetry()", "IsTransactional": false, "PropagateIngestionProperties": false}]```

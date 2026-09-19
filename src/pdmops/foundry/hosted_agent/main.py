@@ -104,7 +104,7 @@ for current state):
 - telemetry_enriched(asset_id, ts, vibration_rms, temp_c, current_a, pressure_bar,
   cycle_count, plant_id, line_id, asset_class, criticality) - raw sensor readings.
 - mv_asset_1m / mv_asset_1h(asset_id, ts, avg_vib, max_vib, avg_temp, avg_cur, avg_press,
-  cycles, n) - per-asset aggregates; prefer these for trends.
+  cycle_max, n) - per-asset aggregates; prefer these for trends.
 - downtime_raw(event_id, asset_id, start_ts, end_ts, is_planned, reason_code, detected_by,
   response_ts, repair_start_ts, repair_end_ts, cost_labour, cost_parts, lost_units) -
   labelled stop events, the basis for MTBF / MTTR.
