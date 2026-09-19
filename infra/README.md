@@ -1,4 +1,4 @@
-# Fleet Ops Copilot — infra
+# PdM Fabric Foundry — infra
 
 Wave 0 plus three Bicep waves, because two of them need IDs that don't exist until a
 Python step or a human portal step has run. See the repo root README for the
@@ -48,7 +48,7 @@ Run `setup/01_workspace.py` through `04_eventstream.py` first, **then**:
 ./deploy.ps1 -Wave 2
 ```
 
-Verify before locking anything down — `python -m fleetops.validate.network_check`
+Verify before locking anything down — `python -m pdmops.validate.network_check`
 from the jumpbox should show the workspace FQDN resolving to a private IP. A
 fresh capacity can take up to 24 hours to appear in the private DNS zone; a
 failure here in the first day usually means "wait," not "broken."
@@ -63,7 +63,7 @@ in the Foundry playground, **then**:
 ./deploy.ps1 -Wave 3
 ```
 
-Then `python -m fleetops.foundry.publish_teams` to actually publish it —
+Then `python -m pdmops.foundry.publish_teams` to actually publish it —
 Bicep only creates the Bot Service resource; the PATCH and
 `microsoft365/publish` REST calls it depends on live in that script.
 
@@ -87,5 +87,7 @@ Bicep only creates the Bot Service resource; the PATCH and
   `setup/06_ops_agent.py` uses an author-in-portal, capture-the-definition
   workflow rather than guessing the shape, since the real definition part
   name and structure aren't obvious from the public docs alone.
-- **The built-in "Buses" sample source's event schema.** Same capture
-  workflow — see `setup/04_eventstream.py` and `artifacts/kql/02_update_policy.kql`.
+- **The downtime Eventstream definition.** Same capture workflow - author it once in the
+  portal, then `setup/04_eventstream.py --capture <id>` (see `artifacts/eventstream.downtime.definition.json`).
+  The telemetry Eventstream belongs to the Real-Time Manufacturing Jumpstart; `artifacts/kql/` adds the
+  enrichment update policy on top of whatever table it lands in.
