@@ -3,7 +3,7 @@ param location string
 
 // Key Vault names are capped at 24 characters — 'kv-pdmops-' (12) plus a
 // 13-char uniqueString() blows that budget by 1, so this uses a shorter prefix.
-param vaultName string = 'kv-flt-${uniqueString(resourceGroup().id)}'
+param vaultName string = 'kv-pdm-${uniqueString(resourceGroup().id)}'
 
 param vnetId string
 param peSubnetId string
