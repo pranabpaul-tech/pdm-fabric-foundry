@@ -43,3 +43,17 @@ def test_uses_execute_query_not_execute():
     text = MAIN.read_text(encoding="utf-8")
     assert ".execute_query(" in text
     assert "_get_kusto_client().execute(" not in text  # execute() would run '.' management commands
+
+
+def test_servertimeout_is_a_timedelta_not_a_string():
+    # Found live: passing "00:00:60" makes azure-kusto-data raise
+    # "can only concatenate str (not timedelta) to str" on every query.
+    text = MAIN.read_text(encoding="utf-8")
+    assert 'set_option("servertimeout", timedelta(' in text
+    assert "timedelta" in text.split("_reject_reason", 1)[0]  # imported at module top
+
+
+def test_tool_result_carries_server_time_for_staleness_checks():
+    # Found live: without it the model claimed a 35-minute-old reading was "<15 minutes old".
+    text = MAIN.read_text(encoding="utf-8")
+    assert '"as_of_utc"' in text and "as_of_utc" in text.split("INSTRUCTIONS", 1)[1]

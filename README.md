@@ -14,7 +14,7 @@ Predictive maintenance on **Microsoft Fabric Real-Time Intelligence** with a **F
 | Fabric setup 01-03 (workspace, Eventhouse, KQL schema) | **Run live**: workspace `pdm-fabric-foundry`, Eventhouse `pdmops-eventhouse`, all 9 tables / 5 functions / 2 materialized views applied |
 | KQL data path | **Proven live** with the simulator: 720 raw -> 720 enriched rows through the update policy, views populated, `fn_anomalies` flags only the injected-fault asset (PUMP-03), no false positives |
 | Downtime Eventstream (04) | Skipped: definition is still a placeholder (see below) |
-| Hosted agent `pdm-orchestrator` (v0: live telemetry lane, read-only KQL tool) | Written; guardrail tested offline; **not yet built or deployed** |
+| Hosted agent `pdm-orchestrator` (live telemetry lane: `asset_snapshot` + read-only `query_telemetry`) | **Deployed (version 6, `active`) and tested from the local machine** with `scripts/ask_agent.py`: correct triage of the faulty pump, healthy pump not over-alarmed, staleness reported. Not yet published to Teams |
 | Teams publish (`foundry/publish_teams.py`, `infra/wave3-bot.bicep`) | Adapted from the reference; **not yet run** |
 | Operations Agent | Item created from the PdM definition; portal *Generate Playbook* / message delivery / *Start* still manual |
 | Downtime Eventstream definition | **Placeholder** - must be authored once in the portal and captured (`04_eventstream.py --capture`) |
@@ -118,6 +118,18 @@ Follow `DEPLOYMENT_PLAN_v2.md` sections 8-10 and the ordering rules in `infra/RE
 - The PowerShell postprovision hook now stops on the first failing step; native command failures do not raise in `pwsh` by themselves.
 - Bash on Windows rewrites arguments that start with `/subscriptions/...`; set `MSYS_NO_PATHCONV=1` when running `az` from Git Bash.
 - `az ad signed-in-user show` can fail with a Conditional Access challenge even after `az login`; the object ID is also in the ARM token's `oid` claim, and the preprovision hook reads `OPERATOR_OBJECT_ID` / `FABRIC_ADMIN_UPN` from the azd env first.
+
+## Lessons from testing the hosted agent (versions 1 -> 6)
+
+Every one of these was found by asking the deployed agent real questions, not by reading code:
+
+1. `ClientRequestProperties.set_option("servertimeout", ...)` needs a `timedelta`; a string made every query fail (v1).
+2. Hour-aligned materialized-view bins make `ts > ago(1h)` return nothing; the agent then gave up after one empty result. Instructions now say which view to use for which window and to retry on zero rows (v3).
+3. The model guessed column names for tables it had no schema for; give it exact columns (v4).
+4. The model called a +0.8% change "sharply increasing", called stale data "<15 minutes old", and said an asset with 2x vibration was "within typical ranges" when it had no baseline. Instructions alone did not fix this.
+5. **Fix that worked:** stop asking the model to do arithmetic. `hosted_agent/snapshot.py` computes baseline deltas, z-scores, materiality (>= 3 sigma AND >= 5 %), data age and staleness in code; the `asset_snapshot` tool returns them and the model only narrates (v6). The logic is unit-tested offline (`tests/test_snapshot.py`) with the exact failure cases.
+
+Try it: `python scripts/ask_agent.py "Triage PUMP-03: is anything wrong?" "Is PUMP-01 healthy?"`
 
 ## Safety notes
 
