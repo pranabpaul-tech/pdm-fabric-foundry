@@ -1,0 +1,123 @@
+// PdM Copilot — Eventhouse schema. Applied in filename order by
+// setup/03_kql_schema.py. Every command is create-merge / create-or-alter, so
+// this is safe to re-run and safe to layer on top of tables the Real-Time
+// Manufacturing Jumpstart already created (columns are only ever added).
+//
+// A line starting with '.' begins a new command; '//' lines are dropped. The
+// parser is deliberately simple (see parse_kql_statements) — no ';' separators.
+
+// ---- telemetry -----------------------------------------------------------
+// Landing table for the telemetry Eventstream. `payload` keeps the full source
+// event so a mapping mistake never loses data.
+.create-merge table telemetry_raw (
+    asset_id: string,
+    ts: datetime,
+    vibration_rms: real,
+    temp_c: real,
+    current_a: real,
+    pressure_bar: real,
+    cycle_count: long,
+    payload: dynamic
+)
+
+// Typed + enriched table (joined to the asset dimension by the update policy).
+.create-merge table telemetry_enriched (
+    asset_id: string,
+    ts: datetime,
+    vibration_rms: real,
+    temp_c: real,
+    current_a: real,
+    pressure_bar: real,
+    cycle_count: long,
+    plant_id: string,
+    line_id: string,
+    asset_class: string,
+    criticality: int,
+    ingestion_time: datetime
+)
+
+// Small dimension used by the enrichment update policy. Seeded from SAP
+// equipment master / the Jumpstart's asset tables (setup/05_lakehouse_gold.py
+// or scripts/simulate_telemetry.py in dev); the Lakehouse dim_asset stays the
+// system of record.
+.create-merge table asset_dim (
+    asset_id: string,
+    asset_name: string,
+    plant_id: string,
+    line_id: string,
+    asset_class: string,
+    criticality: int
+)
+
+// ---- downtime / work orders (the KPI backbone; see solution plan §2) -----
+.create-merge table downtime_raw (
+    event_id: string,
+    asset_id: string,
+    start_ts: datetime,
+    end_ts: datetime,
+    is_planned: bool,
+    reason_code: string,
+    detected_by: string,
+    response_ts: datetime,
+    repair_start_ts: datetime,
+    repair_end_ts: datetime,
+    cost_labour: real,
+    cost_parts: real,
+    lost_units: real
+)
+
+// ---- model outputs and the closed loop -----------------------------------
+.create-merge table prediction_stream (
+    asset_id: string,
+    ts: datetime,
+    model: string,
+    horizon_h: int,
+    p_failure: real,
+    rul_h: real,
+    rul_lo: real,
+    rul_hi: real,
+    run_id: string,
+    shadow: bool
+)
+
+// One row per alert raised. shadow=true rows are logged but never acted on.
+.create-merge table alert_event (
+    alert_id: string,
+    asset_id: string,
+    ts: datetime,
+    model: string,
+    horizon_h: int,
+    p_failure: real,
+    rul_h: real,
+    channel: string,
+    shadow: bool
+)
+
+// Append-only. disposition: confirmed_tp | false_alarm | already_known | not_actioned
+.create-merge table alert_disposition (
+    alert_id: string,
+    ts: datetime,
+    disposition: string,
+    by_user: string,
+    note: string,
+    approval_id: string,
+    source: string
+)
+
+// Append-only approval log for agent-proposed writes (pending -> approved|denied|expired).
+.create-merge table approval_event (
+    approval_id: string,
+    ts: datetime,
+    action_type: string,
+    payload: dynamic,
+    status: string,
+    decided_by: string,
+    expires_at: datetime
+)
+
+// Runtime switches, e.g. alerts_enabled (Activator kill switch). Latest row per key wins.
+.create-merge table pdm_config (
+    key: string,
+    value: string,
+    ts: datetime
+)

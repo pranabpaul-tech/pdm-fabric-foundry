@@ -1,0 +1,43 @@
+{
+  "_placeholder": true,
+  "_note": "Best-guess shape only - NOT verified against the Fabric Eventstream schema. Author the stream once in the Fabric portal (Custom Endpoint source -> Eventhouse destination, table downtime_raw, ProcessedIngestion, JSON), run `python src/pdmops/setup/04_eventstream.py --capture <eventstreamId>` to overwrite this file with the real definition, review it, and commit. 04_eventstream.py re-targets the destination workspaceId/itemId/databaseName on every apply, so per-deployment IDs in the captured file never go stale. Keys starting with '_' are stripped before the definition is sent to Fabric.",
+  "sources": [
+    {
+      "name": "DowntimeAndWorkOrderEvents",
+      "type": "CustomEndpoint",
+      "properties": {}
+    }
+  ],
+  "destinations": [
+    {
+      "name": "downtime_raw",
+      "type": "Eventhouse",
+      "properties": {
+        "dataIngestionMode": "ProcessedIngestion",
+        "workspaceId": "RETARGETED_BY_SCRIPT",
+        "itemId": "RETARGETED_BY_SCRIPT",
+        "databaseName": "RETARGETED_BY_SCRIPT",
+        "tableName": "downtime_raw",
+        "inputSerialization": {
+          "type": "Json",
+          "properties": { "encoding": "UTF8" }
+        }
+      },
+      "inputNodes": [
+        { "name": "DowntimeStream-stream" }
+      ]
+    }
+  ],
+  "streams": [
+    {
+      "name": "DowntimeStream-stream",
+      "type": "DefaultStream",
+      "properties": {},
+      "inputNodes": [
+        { "name": "DowntimeAndWorkOrderEvents" }
+      ]
+    }
+  ],
+  "operators": [],
+  "compatibilityLevel": "1.1"
+}

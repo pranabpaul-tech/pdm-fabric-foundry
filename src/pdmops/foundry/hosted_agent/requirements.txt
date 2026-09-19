@@ -1,0 +1,4 @@
+agent-framework-foundry
+agent-framework-foundry-hosting>=1.0.0b260813
+azure-kusto-data>=4.5.0
+pydantic>=2.7.0

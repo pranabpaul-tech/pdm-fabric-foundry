@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+state.json
+.pdmops-data/
+*.tmp
+.secrets/
+.pytest_cache/
+.azure/
+foundry-vendored-scratch/
+*.zip

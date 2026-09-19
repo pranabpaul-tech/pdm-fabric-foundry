@@ -1,0 +1,33 @@
+// Enrichment used by the telemetry_enriched update policy (030). A left
+// lookup so an event for an asset missing from asset_dim is still kept
+// (with null plant/line/class) rather than silently dropped.
+.create-or-alter function with (folder = 'etl', docstring = 'telemetry_raw -> telemetry_enriched') fn_enrich_telemetry() {
+    telemetry_raw
+    | lookup kind=leftouter (asset_dim | project asset_id, plant_id, line_id, asset_class, criticality) on asset_id
+    | project asset_id, ts, vibration_rms, temp_c, current_a, pressure_bar, cycle_count,
+              plant_id = tostring(plant_id), line_id = tostring(line_id),
+              asset_class = tostring(asset_class), criticality = toint(criticality),
+              ingestion_time = ingestion_time()
+}
+
+// Kill switch read by alert rules: alerts are ON unless the latest
+// pdm_config row for 'alerts_enabled' says 'false'.
+.create-or-alter function with (folder = 'ops') fn_alerts_enabled() {
+    let latest = toscalar(pdm_config | where key == 'alerts_enabled' | top 1 by ts desc | project tolower(value));
+    isnull(latest) or latest != 'false'
+}
+
+// Latest state per asset — the "live asset state" the agent and dashboard read.
+.create-or-alter function with (folder = 'ops') fn_asset_latest() {
+    telemetry_enriched
+    | where ts > ago(1h)
+    | summarize arg_max(ts, vibration_rms, temp_c, current_a, pressure_bar, cycle_count, plant_id, line_id, asset_class) by asset_id
+}
+
+// Silent-sensor check: assets that reported in the last day but not the last N minutes.
+.create-or-alter function with (folder = 'ops') fn_silent_assets(silent_minutes: int = 15) {
+    telemetry_enriched
+    | where ts > ago(1d)
+    | summarize last_seen = max(ts) by asset_id
+    | where last_seen < ago(silent_minutes * 1m)
+}

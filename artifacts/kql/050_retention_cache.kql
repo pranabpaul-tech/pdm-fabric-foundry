@@ -1,0 +1,9 @@
+// Hot 90 days (solution plan §1 Layer 1). Raw is a short recovery window.
+.alter-merge table telemetry_raw policy retention softdelete = 14d recoverability = disabled
+.alter-merge table telemetry_enriched policy retention softdelete = 90d recoverability = disabled
+.alter table telemetry_enriched policy caching hot = 90d
+// The labelled downtime history IS the asset (MTBF/MTTR baseline) — keep ten years.
+.alter-merge table downtime_raw policy retention softdelete = 3650d recoverability = enabled
+.alter-merge table alert_event policy retention softdelete = 3650d recoverability = enabled
+.alter-merge table alert_disposition policy retention softdelete = 3650d recoverability = enabled
+.alter-merge table approval_event policy retention softdelete = 3650d recoverability = enabled

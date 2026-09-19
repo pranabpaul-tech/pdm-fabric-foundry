@@ -1,0 +1,4 @@
+// telemetry_raw -> telemetry_enriched. Non-transactional so an enrichment
+// failure can never block raw ingestion (raw is the recovery source).
+.alter table telemetry_enriched policy update
+```[{"IsEnabled": true, "Source": "telemetry_raw", "Query": "fn_enrich_telemetry()", "IsTransactional": false, "PropagateIngestionProperties": false}]```

@@ -1,0 +1,11 @@
+// OneLake availability (mirroring policy) so the Lakehouse / ML side reads the
+// same bytes with no copy. OPTIONAL and best-effort: syntax and regional
+// availability are still moving — setup/03_kql_schema.py applies this folder
+// statement by statement and only warns on failure. You can also enable it
+// with the KQL database's OneLake availability toggle in the portal.
+.alter-merge table telemetry_enriched policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table downtime_raw policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table prediction_stream policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table alert_event policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table alert_disposition policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table approval_event policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)

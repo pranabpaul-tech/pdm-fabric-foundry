@@ -1,0 +1,9 @@
+azure-identity>=1.17.0
+azure-kusto-data>=4.5.0
+azure-keyvault-secrets>=4.8.0
+azure-ai-projects>=2.3.0
+openai>=1.50.0
+requests>=2.32.0
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+python-dotenv>=1.0.1

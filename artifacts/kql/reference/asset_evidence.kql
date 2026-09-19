@@ -1,0 +1,15 @@
+// Reference query (not applied to the database): last 6h of one asset's signals
+// versus its 7-day baseline. Parameterised by the agent tool / smoke test —
+// replace <ASSET_ID>.
+let asset = '<ASSET_ID>';
+let baseline = telemetry_enriched
+    | where asset_id == asset and ts between (ago(7d) .. ago(6h))
+    | summarize base_vib = avg(vibration_rms), base_temp = avg(temp_c), base_cur = avg(current_a)
+    | extend k = 1;
+telemetry_enriched
+| where asset_id == asset and ts > ago(6h)
+| summarize vib = avg(vibration_rms), temp = avg(temp_c), cur = avg(current_a), n = count() by bin(ts, 15m)
+| extend k = 1
+| join kind=inner baseline on k
+| project ts, vib, vib_delta_pct = round(100 * (vib - base_vib) / base_vib, 1), temp, cur, n
+| order by ts asc

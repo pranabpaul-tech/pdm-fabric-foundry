@@ -1,0 +1,13 @@
+// Real-time anomaly tier: trend/seasonal decomposition per asset on the 1-minute
+// vibration aggregate; returns only the anomalous points. Multivariate scoring
+// is a follow-up (notebook, or in-Eventhouse multivariate AD where available).
+.create-or-alter function with (folder = 'ml', docstring = 'Univariate vibration anomalies per asset') fn_anomalies(lookback: timespan = 6h, threshold: real = 2.5) {
+    mv_asset_1m
+    | where ts > ago(lookback)
+    | make-series v = avg(avg_vib) default = real(null) on ts from ago(lookback) to now() step 1m by asset_id
+    | extend v = series_fill_linear(v)
+    | extend (flag, score, baseline) = series_decompose_anomalies(v, threshold, -1, 'linefit')
+    | mv-expand ts to typeof(datetime), v to typeof(real), flag to typeof(int), score to typeof(real), baseline to typeof(real)
+    | where flag != 0
+    | project asset_id, ts, vibration_avg = v, baseline, score, direction = iff(flag > 0, 'high', 'low')
+}
