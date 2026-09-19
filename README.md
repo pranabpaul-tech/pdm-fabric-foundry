@@ -105,7 +105,7 @@ Later environments use `--apply`.
 
 Follow `DEPLOYMENT_PLAN_v2.md` sections 8-10 and the ordering rules in `infra/README.md`. The important ones:
 
-1. Wave 2 (`deploy.ps1 -Wave 2`) only after `01_workspace.py`; verify private DNS from the jumpbox before `05_network_policy.py --confirm`.
+1. **Fabric items are built from the local machine, not the jumpbox.** Wave 2 (`deploy.ps1 -Wave 2`, then `05_network_policy.py --confirm`) is therefore the **last, optional** step: it locks the workspace to private access, after which local runs against Fabric stop working. Do it only once every Fabric item is built.
 2. The Foundry account must be **public when the agent is deployed and published** (`publicNetworkAccessAtCreation = true`); `publish_teams.py` flips it back to private at the end.
 3. `deploy_hosted_agent.py`, workspace-role grants, and `publish_teams.py` need a **delegated human** (`az login`, not a managed identity); on the jumpbox set `PDMOPS_FORCE_CLI_CREDENTIAL=1`.
 4. `deploy.ps1 -Wave 3` deploys the Bot Service (`msaAppId` = the agent's `instance_identity.client_id`); then `publish_teams.py` prints the Teams deep link `https://teams.microsoft.com/l/app/<teamsAppId>`.

@@ -161,9 +161,9 @@ Waves come from the reference repos; stages map to the 20-week delivery plan.
 | **S4** Data foundation | 2–5 | P | Downtime/WO Eventstream, gold Delta, dims, OneLake availability, frozen baseline | local | Contract tests green; baseline hash committed |
 | **S5** KPI layer | 4–6 | P | Semantic model, report, RTI dashboard | local | KPI reconciliation ≤0.5% |
 | **S6** AI models | 6–10 | P | Anomaly fn, features, classifier, RUL, batch scoring, shadow mode | local | Shadow rows in `fact_prediction`; scorecard live |
-| **W2** Fabric private link | 10 | B+P | Workspace private link, lock workspace to `Deny` | local + **jumpbox** | `network_check` private IP; policy shows `Deny` |
+| **W2** Fabric private link | 10 | B+P | Workspace private link, lock workspace to `Deny` | local; only the DNS check needs the jumpbox. **Last and optional**: run after every Fabric item is built (see §8) | `network_check` private IP; policy shows `Deny` |
 | **S7** Closed loop | 10–13 | P+M | Activator rule, Power Automate flow, SAP notification, disposition table, Ops Agent | local + portal | Synthetic alert → notification + disposition row |
-| **W3a** Agents | 12–15 | P | KB build, hosted agents deploy, toolbox, evals | **jumpbox** (data plane) | `agent_direct` returns grounded answers; evals pass |
+| **W3a** Agents | 12–15 | P | KB build, hosted agents deploy, toolbox, evals | local while the Foundry account is public (it must be, until Teams publish, §9.2); jumpbox only if the project is later locked to private | `agent_direct` returns grounded answers; evals pass |
 | **W3b** Teams | 14–16 | B+P | Bot Service, activity-protocol PATCH, `microsoft365/publish`, lock Foundry private | local (**delegated human**) | `teamsAppId` returned; message reaches agent in Teams |
 | **S9** Value + promote | 16–20 | CI | Dev→test→prod, finance-signed formulas, scale-out template | CI | Runbook, prevented-hours signed |
 
@@ -354,7 +354,7 @@ Mirrors fleet-ops Step 3 **[R]**.
 3. From the **jumpbox**: `python3 src/pdmops/validate/network_check.py` — workspace FQDN must resolve to a private IP. A fresh capacity can take **up to 24 h** to appear in private DNS — "wait", not "broken".
 4. Only then, from your machine: `python src/pdmops/setup/10_network_policy.py --confirm` sets workspace public access to `Deny`; `--status` verifies.
 
-Sequence guard: **do not lock the workspace before** the Eventstream, Data Agent, Operations Agent, and item publishes are finished from your machine, or you will need the jumpbox for all of them.
+**Project rule: Fabric artifacts are built from the local machine, never from the jumpbox.** That only works while the workspace is publicly reachable, so Wave 2 is **the last step and optional**: run it only after every Fabric item (Eventstreams, Lakehouse/notebooks, semantic model, Activator, Data Agent, Operations Agent) is built and published. After the lockdown, further Fabric item changes need either the workspace temporarily reopened (`10_network_policy.py` back to `Allow`) or a runner inside the VNet; plan those changes before locking.
 
 ---
 
@@ -668,7 +668,7 @@ Data-plane work against the private Foundry project, private Search, and the pri
 ## 14. CI/CD, promotion, rollback
 
 - **`infra.yml`** — `what-if` on PR; wave 1 on merge; waves 2/3 gated behind manual approval (they depend on IDs from earlier steps and human sign-in).
-- **`fabric.yml`** — SP-capable steps (items publish, KQL, notebooks, semantic model, Activator apply) run in CI **until Wave 2 locks the workspace**; afterwards item deployment runs from a self-hosted runner in the VNet or from the jumpbox. Decide this in week 1 — it changes the CI design.
+- **`fabric.yml`** — SP-capable steps (items publish, KQL, notebooks, semantic model, Activator apply) run from CI or the local machine while the workspace is public. Nothing runs Fabric item deployment from the jumpbox. If the workspace is later locked (Wave 2), reopen it for the change window or use a VNet-hosted runner; decide before locking.
 - **`agent.yml`** — `az acr build` → evals against candidate image → `create_version` → canary via `FixedRatioVersionSelectionRule` (e.g. 10/90 between old/new version) → 100 %. **Rollback = route 100 % traffic back to the previous version** (agent versions are immutable). Teams re-publish only when the manifest metadata changes (each publish needs a new `appVersion`).
 - Never in CI: Operations Agent create/start, `microsoft365/publish`, tenant-scope approval.
 - Cost control: `set_fabric_capacity_state.sh suspend` for dev nights/weekends; never suspend prod without on-call agreement; budget alerts on model deployments.
