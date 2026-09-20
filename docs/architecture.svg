@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="890" viewBox="0 0 1240 890" role="img" aria-label="Architecture of the predictive-maintenance build. Scripts on the local machine install the Real-Time Manufacturing Jumpstart into a Fabric workspace, add a PdM layer to its Eventhouse, create an Operations Agent, and deploy a hosted agent in a VNet-injected Foundry project that reads the Eventhouse with read-only KQL. Teams, a downtime feed, ML models, Activator and other parts are not built yet.">
+      <title>PdM on Fabric and Foundry: architecture</title>
+      <desc>Architecture of the predictive-maintenance build. Scripts on the local machine install the Real-Time Manufacturing Jumpstart into a Fabric workspace, add a PdM layer to its Eventhouse, create an Operations Agent, and deploy a hosted agent in a VNet-injected Foundry project that reads the Eventhouse with read-only KQL. Teams, a downtime feed, ML models, Activator and other parts are not built yet.</desc>
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahp" d="M0 0 L10 5 L0 10 z"/></marker>
+        <marker id="ahk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="ah-key" d="M0 0 L10 5 L0 10 z"/></marker>
+      </defs>
+<style>
+  svg {
+    --bg: #f3f5f8;
+    --surface: #ffffff;
+    --ink: #16212c;
+    --muted: #56667a;
+    --line: #c6d1dc;
+    --fabric: #0b8574;   --fabric-bg: #e2f3ef;
+    --azure: #2466cf;    --azure-bg: #e5edfa;
+    --foundry: #6642c4;  --foundry-bg: #ece7f9;
+    --local: #9c5a00;    --local-bg: #faf0dd;
+    --todo: #77848f;
+    --ok: #17803a;
+        --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --font: system-ui, "Segoe UI", -apple-system, "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, Menlo, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    svg {
+      --bg: #0e141a;
+      --surface: #151d25;
+      --ink: #e5ecf3;
+      --muted: #9aabbc;
+      --line: #34424f;
+      --fabric: #45d0ba;   --fabric-bg: #10352f;
+      --azure: #7aa9f6;    --azure-bg: #14284a;
+      --foundry: #ae92f2;  --foundry-bg: #281f47;
+      --local: #eaad52;    --local-bg: #37280f;
+      --todo: #8a97a3;
+      --ok: #4cc36f;
+    }
+  }
+  svg { font-family: var(--font); color: var(--ink); }
+  .bgfill { fill: var(--surface); }
+  .panel { fill: var(--bg); stroke: var(--line); stroke-width: 1; }
+  .p-loc { fill: var(--local-bg); stroke: var(--local); stroke-width: 1; opacity: .9; }
+  .p-fab { fill: var(--surface); stroke: var(--fabric); stroke-width: 1.4; }
+  .p-azr { fill: var(--surface); stroke: var(--azure); stroke-width: 1.4; }
+  .in-fab { fill: var(--fabric-bg); stroke: var(--fabric); stroke-width: 1.2; }
+  .in-azr { fill: var(--azure-bg); stroke: var(--azure); stroke-width: 1.2; }
+  .in-fnd { fill: var(--foundry-bg); stroke: var(--foundry); stroke-width: 1.4; }
+  .n { fill: var(--surface); stroke: var(--ink); stroke-width: 1.4; }
+  .n-loc { fill: var(--surface); stroke: var(--local); stroke-width: 1.4; }
+  .n-fab { fill: var(--surface); stroke: var(--fabric); stroke-width: 1.6; }
+  .n-azr { fill: var(--surface); stroke: var(--azure); stroke-width: 1.4; }
+  .n-fnd { fill: var(--surface); stroke: var(--foundry); stroke-width: 2; }
+  .dash { stroke-dasharray: 6 4; }
+  .todo { fill: none; stroke: var(--todo); stroke-width: 1.4; stroke-dasharray: 2 4; }
+  .band { fill: none; stroke: var(--line); stroke-width: 1; }
+
+  .t { font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+  .m { font-family: var(--mono); font-size: 11.5px; font-weight: 500; fill: var(--ink); }
+  .s { font-size: 10.5px; fill: var(--muted); }
+  .cap { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; fill: var(--muted); }
+  .cap-fab { fill: var(--fabric); } .cap-azr { fill: var(--azure); } .cap-fnd { fill: var(--foundry); } .cap-loc { fill: var(--local); }
+  .lbl { font-size: 10.5px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+  .lbl-b { font-size: 10.5px; fill: var(--ink); font-weight: 500; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+  .a { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+  .a-key { fill: none; stroke: var(--ink); stroke-width: 2; }
+  .ah { fill: var(--muted); } .ah-key { fill: var(--ink); } .ahp { fill: var(--todo); }
+  .a-plan { fill: none; stroke: var(--todo); stroke-width: 1.8; stroke-dasharray: 5 4; }
+  .ok { fill: var(--ok); }
+  .chk { font-size: 11px; fill: var(--ok); font-weight: 600; }
+</style>
+<rect class="bgfill" x="0" y="0" width="1240" height="890"/>
+
+      <!-- ============ YOUR MACHINE ============ -->
+      <rect class="p-loc" x="20" y="20" width="1200" height="100" rx="8"/>
+      <text class="cap cap-loc" x="36" y="41">Your machine · signed in with az login · Fabric items are built here, not on the jumpbox</text>
+
+      <rect class="n-loc" x="40" y="52" width="170" height="52" rx="5"/>
+      <text class="m" x="52" y="73">fabric-jumpstart</text>
+      <text class="s" x="52" y="91">install, Python 3.13</text>
+
+      <rect class="n-loc" x="250" y="52" width="170" height="52" rx="5"/>
+      <text class="m" x="262" y="73">setup/03 + 06</text>
+      <text class="s" x="262" y="91">PdM layer · Operations Agent</text>
+
+      <rect class="n-loc" x="450" y="52" width="190" height="52" rx="5"/>
+      <text class="t" x="462" y="73">GitHub repo (public)</text>
+      <text class="s" x="462" y="91">Bicep, KQL, agent · 25 tests</text>
+
+      <rect class="n-loc" x="690" y="52" width="140" height="52" rx="5"/>
+      <text class="m" x="702" y="73">azd provision</text>
+      <text class="s" x="702" y="91">Bicep waves 0–1</text>
+
+      <rect class="n-loc" x="845" y="52" width="150" height="52" rx="5"/>
+      <text class="m" x="857" y="73">ask_agent.py</text>
+      <text class="s" x="857" y="91">live agent tests</text>
+
+      <rect class="n-loc" x="1010" y="52" width="200" height="52" rx="5"/>
+      <text class="m" x="1022" y="73">deploy_hosted_agent.py</text>
+      <text class="s" x="1022" y="91">analysis tools + v13</text>
+
+      <path class="a" d="M125 104 V172" marker-end="url(#ah)"/>
+      <text class="lbl" x="133" y="150">install into new workspace</text>
+      <path class="a" d="M335 104 V172" marker-end="url(#ah)"/>
+      <text class="lbl" x="343" y="150">KQL + Fabric REST</text>
+      <path class="a" d="M760 104 V206" marker-end="url(#ah)"/>
+      <text class="lbl" x="768" y="150">ARM · 45 resources</text>
+      <path class="a-key" d="M920 104 V256" marker-end="url(#ahk)"/>
+      <text class="lbl-b" x="928" y="150">Responses API</text>
+      <path class="a" d="M1110 104 V256" marker-end="url(#ah)"/>
+      <text class="lbl" x="1118" y="150">new version</text>
+
+      <!-- ============ FABRIC ============ -->
+      <rect class="p-fab" x="20" y="170" width="620" height="580" rx="8"/>
+      <text class="cap cap-fab" x="36" y="742">Microsoft Fabric · capacity pdmopsf8 (F8) · workspace pdm-manufacturing-jumpstart</text>
+
+      <rect class="n-fab" x="40" y="196" width="250" height="44" rx="5"/>
+      <text class="t" x="52" y="215">2 Eventstreams (custom endpoint)</text>
+      <text class="s" x="52" y="231">SensorDataEvents · QualityDataEvents</text>
+
+      <rect class="n-fab" x="350" y="196" width="270" height="44" rx="5"/>
+      <text class="t" x="362" y="215">SimulateMachineData notebook</text>
+      <text class="s" x="362" y="231">Fabric Spark job · loops up to 2 h; rerun when it ends</text>
+      <path class="a" d="M348 218 H292" marker-end="url(#ah)"/>
+      <text class="lbl" x="298" y="212" style="font-size:9.5px">sends</text>
+
+      <rect class="in-fab" x="40" y="256" width="580" height="344" rx="6"/>
+      <text class="cap cap-fab" x="604" y="276" text-anchor="end">Eventhouse · ManufacturingRealtimeAnalytics</text>
+
+      <path class="a" d="M110 240 V294" marker-end="url(#ah)"/>
+      <text class="lbl" x="118" y="272">sensor + quality events</text>
+
+      <!-- row 1: sensor chain -->
+      <rect class="n-fab" x="60" y="296" width="130" height="50" rx="5"/>
+      <text class="m" x="72" y="317">machineraw</text><text class="s" x="72" y="334">landing table</text>
+      <path class="a" d="M190 321 H248" marker-end="url(#ah)"/>
+      <text class="lbl" x="200" y="313" style="font-size:9.5px">flatten</text>
+      <rect class="n-fab" x="250" y="296" width="140" height="50" rx="5"/>
+      <text class="m" x="262" y="317">sensors_parsed</text><text class="s" x="262" y="334">1 row per reading</text>
+      <path class="a" d="M390 321 H448" marker-end="url(#ah)"/>
+      <rect class="n-fab" x="450" y="296" width="150" height="50" rx="5"/>
+      <text class="m" x="462" y="317" style="font-size:11px">mv_machine_1m/1h</text><text class="s" x="462" y="334">wide, per minute (PdM)</text>
+
+      <!-- row 2: PdM functions -->
+      <rect class="n-fab" x="60" y="396" width="130" height="60" rx="5"/>
+      <text class="t" x="72" y="416">SAP master data</text><text class="s" x="72" y="432">machines_internal</text><text class="s" x="72" y="446">sites_internal</text>
+      <path class="a" d="M190 426 H248" marker-end="url(#ah)"/>
+      <rect class="n-fab" x="250" y="396" width="350" height="60" rx="5"/>
+      <text class="t" x="262" y="416">PdM functions (added by this repo)</text>
+      <text class="s" x="262" y="433">pdm_telemetry() · pdm_asset_dim() · pdm_asset_latest()</text>
+      <text class="s" x="262" y="447">pdm_silent_assets() · pdm_anomalies() · pdm_alerts_enabled()</text>
+      <path class="a" d="M525 346 V394" marker-end="url(#ah)"/>
+
+      <!-- row 3: quality chain -->
+      <rect class="n-fab" x="60" y="486" width="130" height="50" rx="5"/>
+      <text class="m" x="72" y="507">mqttdataraw</text><text class="s" x="72" y="524">quality events</text>
+      <path class="a" d="M190 511 H248" marker-end="url(#ah)"/>
+      <text class="lbl" x="200" y="503" style="font-size:9.5px">flatten</text>
+      <rect class="n-fab" x="250" y="486" width="140" height="50" rx="5"/>
+      <text class="m" x="262" y="507" style="font-size:11px">production_quality</text><text class="s" x="262" y="524">1 row per item</text>
+      <path class="a" d="M390 511 H438" marker-end="url(#ah)"/>
+      <rect class="n-fab" x="440" y="486" width="160" height="50" rx="5"/>
+      <text class="t" x="452" y="507">OEE functions</text><text class="s" x="452" y="524">Avail. · Perf. · Quality</text>
+
+      <rect class="n-fab dash" x="60" y="548" width="540" height="42" rx="5"/>
+      <text class="t" x="72" y="566">PdM tables: built, empty</text>
+      <text class="s" x="72" y="581">downtime_raw · prediction_stream · alert_event · alert_disposition · approval_event · pdm_config</text>
+
+      <!-- below eventhouse -->
+      <rect class="n-fab dash" x="40" y="612" width="580" height="58" rx="5"/>
+      <text class="t" x="54" y="632">Operations Agent · PdM Operations Monitor (created)</text>
+      <text class="s" x="54" y="649">3 rules: sensor shift vs own baseline · silent machine · quality drop</text>
+      <text class="s" x="54" y="662">Message delivery to Teams is planned; playbook and Start are manual portal steps</text>
+
+      <rect class="n-fab" x="40" y="682" width="340" height="44" rx="5"/>
+      <text class="t" x="54" y="702">Also installed, untouched</text>
+      <text class="s" x="54" y="718">Lakehouse · model · report · dashboard · pipeline</text>
+      <rect class="n-fab" x="392" y="682" width="228" height="44" rx="5"/>
+      <text class="t" x="404" y="702">Data Agent (published)</text>
+      <text class="s" x="404" y="718">TalkToManufacturingData</text>
+
+      <!-- ============ AZURE ============ -->
+      <rect class="p-azr" x="680" y="170" width="540" height="580" rx="8"/>
+      <text class="cap cap-azr" x="696" y="742">Azure · rg-pdm-fabric-foundry · swedencentral · 45 resources</text>
+
+      <rect class="in-azr" x="700" y="206" width="500" height="372" rx="6"/>
+      <text class="m" x="712" y="222" style="font-size:11px;fill:var(--azure)">vnet-pdmops</text>
+
+      <rect class="panel" x="714" y="232" width="472" height="200" rx="5"/>
+      <text class="cap" x="726" y="248" style="font-size:9.5px">snet-agent</text>
+      <rect class="in-fnd" x="726" y="256" width="448" height="152" rx="6"/>
+      <text class="t" x="738" y="274">Foundry account pdmopsaiacon</text>
+      <text class="s" x="738" y="289">project pdm-agentsacon · gpt-4.1 · capability hosts succeeded</text>
+
+      <rect class="n-fnd" x="740" y="300" width="250" height="96" rx="5"/>
+      <text class="m" x="752" y="320" style="font-size:12.5px">pdm-orchestrator</text>
+      <text class="chk" x="924" y="320">✓ v13 active</text>
+      <text class="s" x="752" y="338">hosted agent · Microsoft Agent Framework</text>
+      <text class="s" x="752" y="355">KQL: its own identity (Viewer only)</text>
+      <text class="s" x="752" y="370">Data Agent: the asker's own token</text>
+      <text class="s" x="752" y="385">+ 4 analysis tools · no write tools</text>
+
+      <rect class="n-fnd" x="1010" y="298" width="150" height="30" rx="5"/>
+      <text class="m" x="1020" y="311" style="font-size:10.5px">asset_snapshot()</text>
+      <text class="s" x="1020" y="323" style="font-size:9.5px">baseline math in code</text>
+      <rect class="n-fnd" x="1010" y="336" width="150" height="30" rx="5"/>
+      <text class="m" x="1020" y="349" style="font-size:10.5px">query_telemetry()</text>
+      <text class="s" x="1020" y="361" style="font-size:9.5px">read-only KQL, row cap</text>
+      <rect class="n-fnd" x="1010" y="374" width="150" height="30" rx="5"/>
+      <text class="m" x="1020" y="387" style="font-size:10.5px">fabric toolbox</text>
+      <text class="s" x="1020" y="399" style="font-size:9.5px">user token, Data Agent</text>
+      <path class="a" d="M990 313 H1008" marker-end="url(#ah)"/>
+      <path class="a" d="M990 351 H1008" marker-end="url(#ah)"/>
+      <path class="a" d="M990 389 H1008" marker-end="url(#ah)"/>
+      <text class="s" x="726" y="424" style="font-size:10px">account is private; Teams uses the Bot Service's route</text>
+
+      <path class="a-key" d="M738 348 H622" marker-end="url(#ahk)"/>
+      <text class="lbl-b" x="628" y="326">read-only KQL</text>
+      <text class="lbl" x="628" y="340">agent identity</text>
+
+      <path class="a-key" d="M738 389 H660 V704 H622" marker-end="url(#ahk)"/>
+      <text class="lbl-b" x="668" y="560" text-anchor="middle" transform="rotate(-90 668 560)" style="font-size:10px">Data Agent, caller's token</text>
+      <path class="a" d="M1050 408 V442" marker-end="url(#ah)"/>
+      <text class="lbl" x="1058" y="431">threads · files · index</text>
+
+      <rect class="panel" x="714" y="444" width="472" height="74" rx="5"/>
+      <text class="cap" x="726" y="460" style="font-size:9.5px">snet-pe · private endpoints</text>
+      <rect class="n-azr" x="726" y="470" width="82" height="34" rx="4"/><text class="s" x="767" y="491" text-anchor="middle" style="fill:var(--ink)">AI Search</text>
+      <rect class="n-azr" x="817" y="470" width="82" height="34" rx="4"/><text class="s" x="858" y="491" text-anchor="middle" style="fill:var(--ink)">Storage</text>
+      <rect class="n-azr" x="908" y="470" width="82" height="34" rx="4"/><text class="s" x="949" y="491" text-anchor="middle" style="fill:var(--ink)">Cosmos DB</text>
+      <rect class="n-azr" x="999" y="470" width="82" height="34" rx="4"/><text class="s" x="1040" y="491" text-anchor="middle" style="fill:var(--ink)">ACR</text>
+      <rect class="n-azr" x="1090" y="470" width="82" height="34" rx="4"/><text class="s" x="1131" y="491" text-anchor="middle" style="fill:var(--ink)">Key Vault</text>
+
+      <rect class="n-azr dash" x="714" y="530" width="472" height="36" rx="5"/>
+      <text class="s" x="726" y="552" style="fill:var(--ink)"><tspan class="cap" style="font-size:9.5px">snet-container</tspan>  jumpbox ci-pdmops-jump: deployed, unused</text>
+
+      <rect class="n-azr" x="700" y="590" width="500" height="36" rx="5"/>
+      <text class="s" x="714" y="612" style="fill:var(--ink)">Log Analytics + Application Insights (agent traces, deployment logs)</text>
+
+
+      <path class="a-plan" d="M622 641 H690 V672 H718" marker-end="url(#ahp)"/>
+      <text class="lbl" x="628" y="633" style="font-size:9.5px">planned: alerts to Teams</text>
+      <!-- Teams path -->
+      <rect class="n-azr" x="720" y="648" width="200" height="60" rx="5"/>
+      <text class="t" x="732" y="669">Microsoft Teams</text>
+      <text class="s" x="732" y="685">app published, Shared scope</text>
+      <text class="s" x="732" y="699">not yet tried by a person</text>
+      <path class="a" d="M922 678 H948" marker-end="url(#ah)"/>
+      <rect class="n-azr" x="950" y="648" width="240" height="60" rx="5"/>
+      <text class="t" x="962" y="669">Azure Bot Service</text>
+      <text class="m" x="962" y="685" style="font-size:10.5px">bot-pdm-orchestrator</text>
+      <text class="s" x="962" y="699">single-tenant · Teams channel on</text>
+      <path class="a-key" d="M1190 678 H1210 V330 H1176" marker-end="url(#ahk)"/>
+      <text class="lbl-b" x="1204" y="520" text-anchor="end" transform="rotate(-90 1204 520)" style="font-size:10px">Activity Protocol</text>
+
+      <!-- ============ NOT BUILT ============ -->
+      <text class="cap" x="20" y="772">Not built yet</text>
+      <rect class="todo" x="20" y="784" width="160" height="92" rx="6"/>
+      <text class="t" x="32" y="805">Teams: first chat</text>
+      <text class="s" x="32" y="823">published; a person has to</text><text class="s" x="32" y="837">chat first. Ops Agent alerts</text><text class="s" x="32" y="851">to Teams are planned</text>
+
+      <rect class="todo" x="193" y="784" width="160" height="92" rx="6"/>
+      <text class="t" x="205" y="805">Downtime feed</text>
+      <text class="s" x="205" y="823">downtime_raw is empty, so</text><text class="s" x="205" y="837">MTBF and MTTR cannot be</text><text class="s" x="205" y="851">computed yet</text>
+
+      <rect class="todo" x="366" y="784" width="160" height="92" rx="6"/>
+      <text class="t" x="378" y="805">Real fault data</text>
+      <text class="s" x="378" y="823">sensors are random noise;</text><text class="s" x="378" y="837">the simulator's fault flag</text><text class="s" x="378" y="851">for machine 103 is off</text>
+
+      <rect class="todo" x="539" y="784" width="160" height="92" rx="6"/>
+      <text class="t" x="551" y="805">Failure and RUL models</text>
+      <text class="s" x="551" y="823">train on the Jumpstart</text><text class="s" x="551" y="837">Lakehouse; nothing</text><text class="s" x="551" y="851">trained yet</text>
+
+      <rect class="todo" x="712" y="784" width="160" height="92" rx="6"/>
+      <text class="t" x="724" y="805">Activator + SAP loop</text>
+      <text class="s" x="724" y="823">Jumpstart Activator did</text><text class="s" x="724" y="837">not deploy; Power Automate,</text><text class="s" x="724" y="851">dispositions, ledger</text>
+
+      <rect class="todo" x="885" y="784" width="160" height="92" rx="6"/>
+      <text class="t" x="897" y="805">Agent writes + KB</text>
+      <text class="s" x="897" y="823">Foundry IQ knowledge base,</text><text class="s" x="897" y="837">approval-gated actions</text>
+
+      <rect class="todo" x="1058" y="784" width="160" height="92" rx="6"/>
+      <text class="t" x="1070" y="805">Fabric private link</text>
+      <text class="s" x="1070" y="823">Wave 2: last and optional;</text><text class="s" x="1070" y="837">would stop local builds</text><text class="s" x="1070" y="851">reaching the workspace</text>
+    </svg>

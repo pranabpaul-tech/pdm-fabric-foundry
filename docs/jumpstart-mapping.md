@@ -45,9 +45,13 @@ name is new (`pdm_*` functions in folder `PdM`, `mv_machine_*` views, six new ta
 - `.create-or-alter materialized-view ... with (backfill = true)` is only valid for a view that does not exist yet; `03_kql_schema.py`
   now drops the option for existing views.
 
-## Still pointing at the old Eventhouse
+## Agents on the Jumpstart data
 
-The hosted Foundry agent (`pdm-orchestrator`, version 6), `snapshot.py`, `main.py` and `scripts/ask_agent.py` still read the hand-built
-`pdmops-eventhouse` (tables `telemetry_enriched`, `mv_asset_1m`, columns `vibration_rms`, `temp_c`, `current_a`, `pressure_bar`).
-Re-pointing them is deferred with the rest of the Foundry work. It needs: `snapshot.py` to query `pdm_telemetry()` with signals
-`vibration_mms`, `temp_c`, `pressure_bar` (no current); new Eventhouse URI env vars; updated agent instructions; a new agent version.
+The hosted agent `pdm-orchestrator` (now version 13) reads the Jumpstart Eventhouse. `snapshot.py` and `analysis.py` query `pdm_telemetry()` with the
+three Jumpstart signals (`vibration_mms`, `temp_c`, `pressure_bar`; there is no current sensor), the agent's identity holds workspace *Viewer* and
+Eventhouse *viewer* on the Jumpstart workspace, and it reaches the Jumpstart's `TalkToManufacturingData` Data Agent through the toolbox
+`pdm-fabric-toolbox` (user-token connection). The Operations Agent `PdM Operations Monitor` lives in the Jumpstart workspace.
+
+Two facts about the data that the tools handle explicitly: `pdm_anomalies` returns nothing until it has 30 minutes of real history, and the
+simulated `production_quality` counts (about 2,280 items per hour) contradict its cycle times (a 6.5 s cycle allows about 555 per hour), which
+`oee_outlook` detects and warns about.
