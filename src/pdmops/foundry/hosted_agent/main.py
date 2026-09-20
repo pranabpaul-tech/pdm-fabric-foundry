@@ -23,7 +23,7 @@ import asyncio
 import json
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from agent_framework import Agent, tool
 from agent_framework.foundry import FoundryChatClient
@@ -33,6 +33,7 @@ from azure.kusto.data import ClientRequestProperties, KustoClient, KustoConnecti
 from dotenv import load_dotenv
 from pydantic import Field
 
+import analysis as an  # deterministic forecast / time-to-limit / ranking / outlook (analysis.py, same directory)
 import snapshot as snap  # deterministic baseline/staleness logic (snapshot.py, same directory)
 
 load_dotenv()
@@ -160,6 +161,79 @@ def asset_snapshot(
         return f"SNAPSHOT FAILED: {exc}"
 
 
+Signal = Annotated[Literal["vibration_mms", "temp_c", "pressure_bar"],
+                   Field(description="vibration_mms (mm/s), temp_c (degC) or pressure_bar (bar). There is no current sensor.")]
+
+
+@tool(approval_mode="never_require")
+def forecast_signal(
+    asset_id: Annotated[str, Field(description="Machine id as text, e.g. '103'.")],
+    signal: Signal,
+    horizon_minutes: Annotated[int, Field(ge=5, le=360, description="How far past the newest reading to project, in minutes.")] = 60,
+) -> str:
+    """Trend check and short forecast of ONE signal of ONE machine: a line fitted to the last ~3 hours of 1-minute
+    data, its slope with a 95% interval, whether the trend is statistically significant, and the expected value and 95%
+    prediction interval at the horizon. When there is no significant trend the forecast is the flat level. This is NOT a
+    failure prediction and gives no probability of failure. Report reliability and history length with any number."""
+    try:
+        aid = snap.validate_asset_id(asset_id)
+        return json.dumps(an.forecast_signal(aid, signal, _rows(an.series_kql(aid, signal), 400), horizon_minutes), default=str)
+    except Exception as exc:  # noqa: BLE001 - surfaced to the model verbatim
+        return f"FORECAST FAILED: {exc}"
+
+
+@tool(approval_mode="never_require")
+def time_to_limit(
+    asset_id: Annotated[str, Field(description="Machine id as text, e.g. '103'.")],
+    signal: Signal,
+    limit: Annotated[float | None, Field(description="Alarm limit in the signal's unit. Omit for vibration to use the illustrative ISO 10816 alert limit; REQUIRED (ask the user) for temp_c and pressure_bar.")] = None,
+    direction: Annotated[Literal["above", "below"], Field(description="Whether the limit is an upper or a lower bound.")] = "above",
+) -> str:
+    """How long until ONE signal of ONE machine would cross an alarm limit if its fitted trend continued: status
+    NO_CROSSING_EXPECTED / CROSSING_ESTIMATED (hours, with earliest and latest) / ALREADY_BEYOND / BEYOND_HORIZON /
+    NO_LIMIT_CONFIGURED / INSUFFICIENT_HISTORY. A flat signal never crosses; a sudden step change cannot be foreseen
+    from this data. Not a failure prediction."""
+    try:
+        aid = snap.validate_asset_id(asset_id)
+        return json.dumps(an.time_to_limit(aid, signal, _rows(an.series_kql(aid, signal), 400), limit, direction), default=str)
+    except Exception as exc:  # noqa: BLE001
+        return f"TIME_TO_LIMIT FAILED: {exc}"
+
+
+@tool(approval_mode="never_require")
+def risk_ranking() -> str:
+    """Triage ordering of ALL machines by how much attention they need: HIGH / MEDIUM / UNKNOWN / LOW with the
+    reasons (own-baseline sensor shifts from asset_snapshot's logic, first-pass-yield and cycle-time gaps against the
+    fleet median, statistically significant trends). It is NOT a probability of failure. Use it for 'which machine
+    should I look at first' and fleet-wide questions."""
+    try:
+        snapshots, trends = an.build_fleet_inputs(_rows(an.fleet_stats_kql(), 100), _rows(an.fleet_series_kql(), 3000))
+        quality = {str(r["machine_id"]): r for r in _rows(an.quality_kql(), 100)}
+        names = {r["asset_id"]: r for r in _rows("pdm_asset_dim() | project asset_id, asset_name, plant_name", 100)}
+        result = an.rank_fleet(snapshots, trends, quality, names)
+        result["as_of_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S+00:00")
+        return json.dumps(result, default=str)
+    except Exception as exc:  # noqa: BLE001
+        return f"RISK_RANKING FAILED: {exc}"
+
+
+@tool(approval_mode="never_require")
+def oee_outlook(
+    asset_id: Annotated[str, Field(description="Machine id as text, e.g. '103'.")],
+) -> str:
+    """What a persistent quality / cycle-time gap costs ONE machine, in units, from production_quality: first-pass yield
+    and cycle time against the fleet median, performance against the 4 s ideal, and good units lost per 24 h if the gap
+    persists. It states its assumptions and warns when the recorded fields contradict each other. Units only: there is no
+    cost data. A persistent gap is not a trend."""
+    try:
+        aid = snap.validate_asset_id(asset_id)
+        quality = {str(r["machine_id"]): r for r in _rows(an.quality_kql(), 100)}
+        return json.dumps(an.oee_outlook(aid, quality), default=str)
+    except Exception as exc:  # noqa: BLE001
+        return f"OEE_OUTLOOK FAILED: {exc}"
+
+
+
 INSTRUCTIONS = """\
 You are the PdM Copilot for maintenance technicians and reliability engineers at a manufacturing
 company. You help them decide what to do about machines that may fail.
@@ -207,6 +281,25 @@ the default made explicit and state the assumption in your answer. Defaults: com
 the last 7 days; per-machine questions cover every machine in pdm_asset_dim(); one figure per site or
 machine unless a trend is asked for. Only ask the user when the choice would change the answer materially
 (for example two different years of data) and say which default you would otherwise have used.
+
+PREDICTIVE ANALYSIS TOOLS (forecast_signal, time_to_limit, risk_ranking, oee_outlook): these are trend and
+outlook calculations done in code. They are NOT failure predictions: there is no failure history and no trained
+model. NEVER state a probability of failure, a remaining useful life, or a date on which a machine "will fail". If
+asked to predict failure, say plainly that this cannot be done from the data available, then offer what these tools
+can do.
+- forecast_signal: fitted line and 95% interval for one signal. If the status is NO_SIGNIFICANT_TREND the signal is
+  flat: give the expected level range and never describe it as rising or falling. Always state the history length and
+  the reliability.
+- time_to_limit: hours until an alarm limit would be crossed at the fitted trend. The default vibration limit is an
+  illustrative ISO 10816 guideline, say so; for temperature or pressure ask the user for the limit. Report
+  NO_CROSSING_EXPECTED together with its caveat that a sudden step change cannot be foreseen.
+- risk_ranking: a triage order with reasons, not probabilities. Quote each machine's reasons.
+- oee_outlook: what a persistent quality or cycle-time gap costs in units. Repeat its assumptions, and if it carries
+  a WARNING about inconsistent data, say so prominently and treat the unit figures as illustrative. Never turn units
+  into money: there is no cost data.
+Use them after asset_snapshot when the user asks what is likely to happen next or what to look at first.
+When only PART of a question can be answered (for example a cost question with no cost data), call the tool and
+give that part in the same reply, together with what is missing. Do not ask permission to run a read-only tool.
 
 WHEN ASKED ABOUT A MACHINE (triage):
 0. FIRST call asset_snapshot(asset_id). It computes, in code, each signal's change against the
@@ -257,7 +350,7 @@ async def main() -> None:
         credential=_credential,
     )
 
-    tools: list = [asset_snapshot, query_telemetry]
+    tools: list = [asset_snapshot, query_telemetry, forecast_signal, time_to_limit, risk_ranking, oee_outlook]
     toolbox_name = os.environ.get("TOOLBOX_NAME")
     if toolbox_name:
         # Only FoundryToolbox forwards the caller's identity to the Fabric MCP proxy (an inline Fabric tool
