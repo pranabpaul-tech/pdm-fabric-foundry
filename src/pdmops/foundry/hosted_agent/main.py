@@ -6,7 +6,7 @@ prompt agent) - see foundry/deploy_hosted_agent.py. This first cut has ONE
 tool, `query_telemetry`, which runs read-only KQL against the Eventhouse from
 the agent's own process with its own granted identity (no MCP, no Toolbox).
 
-Roadmap (see DEPLOYMENT_PLAN_v2.md section 9): lakehouse_agent (T-SQL on the
+Roadmap: lakehouse_agent (T-SQL on the
 gold tables), kb_agent (Foundry IQ knowledge base), the Fabric Data Agent
 toolbox (user OBO), and the approval-gated action tools - each added as an
 in-process tool of this same orchestrator.

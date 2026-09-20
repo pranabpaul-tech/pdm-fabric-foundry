@@ -2,24 +2,22 @@
 
 Predictive maintenance on **Microsoft Fabric Real-Time Intelligence** with a **Foundry-hosted agent published to Microsoft Teams** (Azure Bot Service). Built on the deployment patterns proven in `foundry-iq-v2` and `fleet-ops-copilot`.
 
-- Plan: [`DEPLOYMENT_PLAN_v2.md`](DEPLOYMENT_PLAN_v2.md) (architecture, KPIs, stages, gotchas). [`DEPLOYMENT_PLAN.md`](DEPLOYMENT_PLAN.md) is the superseded v1.
-- This README: what exists in the repo today and how to deploy it.
+- Data side: the **Real-Time Manufacturing Jumpstart** (installed) with a PdM layer on top - see [`docs/jumpstart-mapping.md`](docs/jumpstart-mapping.md).
+- Agent side: a Foundry hosted agent (deployed, currently **not pointing at any live data**; see Status).
+- The earlier written deployment plans were removed at the owner's request; this README and `docs/` are the current record.
 
 ## Status
 
 | Area | State |
 |---|---|
-| Bicep waves 0-1 (network, F8 capacity, Key Vault, monitoring, ACR, jumpbox, vendored Foundry standard agent) | **Deployed** to `rg-pdm-fabric-foundry` (swedencentral): 45 resources, capability hosts `Succeeded`, account injected into `snet-agent`, public access still `Enabled` (required until the agent is published to Teams) |
-| Bicep waves 2-3 (Fabric private link, Bot Service + Teams channel) | Adapted, compile; **not yet deployed** |
-| Fabric setup 01-03 (workspace, Eventhouse, KQL schema) | **Run live**: workspace `pdm-fabric-foundry`, Eventhouse `pdmops-eventhouse`, all 9 tables / 5 functions / 2 materialized views applied |
-| KQL data path | **Proven live** with the simulator: 720 raw -> 720 enriched rows through the update policy, views populated, `fn_anomalies` flags only the injected-fault asset (PUMP-03), no false positives |
-| Downtime Eventstream (04) | Skipped: definition is still a placeholder (see below) |
-| Hosted agent `pdm-orchestrator` (live telemetry lane: `asset_snapshot` + read-only `query_telemetry`) | **Deployed (version 6, `active`) and tested from the local machine** with `scripts/ask_agent.py`: correct triage of the faulty pump, healthy pump not over-alarmed, staleness reported. Not yet published to Teams |
-| Teams publish (`foundry/publish_teams.py`, `infra/wave3-bot.bicep`) | Adapted from the reference; **not yet run** |
-| Operations Agent | Item created from the PdM definition; portal *Generate Playbook* / message delivery / *Start* still manual |
-| Downtime Eventstream definition | **Placeholder** - must be authored once in the portal and captured (`04_eventstream.py --capture`) |
-| Lakehouse gold tables, notebooks/ML, semantic model, Activator, Foundry IQ KB, Fabric Data Agent toolbox, lakehouse T-SQL agent, approval-gated action tools | **Not started** (plan sections 7, 9, 11) |
-| `actions/incident_store.py` | Local-file store from the reference - **does not work inside a hosted-agent container**; to be replaced by the Eventhouse-backed `approval_event` log before any write tool ships |
+| Azure: waves 0-1 (network, F8 capacity, Key Vault, monitoring, ACR, jumpbox, vendored Foundry standard agent) | **Deployed** to `rg-pdm-fabric-foundry` (swedencentral): 45 resources, capability hosts `Succeeded`, Foundry account injected into `snet-agent`, public access still `Enabled`. Fabric capacity `pdmopsf8` (F8) was found paused once and had to be resumed |
+| Fabric: Real-Time Manufacturing Jumpstart | **Installed** in workspace `pdm-manufacturing-jumpstart` (17 items). Simulator (`SimulateMachineData`) must be run as its own job; it loops up to 2 hours |
+| Fabric: PdM layer on the Jumpstart Eventhouse | **Applied and verified** (`smoke_jumpstart.py`): 6 new tables, `pdm_asset_dim()`, `mv_machine_1m/1h`, `pdm_telemetry()`, `pdm_asset_latest()`, `pdm_silent_assets()`, `pdm_anomalies()`, `pdm_alerts_enabled()` |
+| Hosted agent `pdm-orchestrator` (version 6) | Deployed, but it read the hand-built Eventhouse, which was **deleted**. Its `query_telemetry` / `asset_snapshot` tools now fail. Re-pointing to the Jumpstart Eventhouse is deferred with the Foundry work (see `docs/jumpstart-mapping.md`) |
+| Azure waves 2-3 (Fabric private link, Bot Service + Teams) | Written, compile; **not deployed** |
+| Downtime data, Lakehouse gold tables, ML models, Activator, Foundry IQ KB, approval-gated write tools, Teams publish | **Not started** |
+| `actions/incident_store.py` | Local-file store from the reference - does not work inside a hosted-agent container; to be replaced by the Eventhouse-backed `approval_event` log before any write tool ships |
+| Hand-built workspace `pdm-fabric-foundry` (Eventhouse `pdmops-eventhouse`, Operations Agent) | **Deleted** on request. `artifacts/kql/`, `setup/01-04`, `06_ops_agent.py` and `simulate_telemetry.py` targeted it and are kept only as reference |
 
 ## Real-Time Manufacturing Jumpstart (installed)
 
@@ -37,8 +35,6 @@ $env:FABRIC_JUMPSTART_TOKEN_CREDENTIAL = "AzureCliCredential"
 python src/pdmops/setup/03_kql_schema.py --target jumpstart      # PdM layer on the Jumpstart Eventhouse
 python src/pdmops/validate/smoke_jumpstart.py                    # verify
 ```
-
-The earlier hand-built workspace (`pdm-fabric-foundry`, Eventhouse `pdmops-eventhouse`, simulator) is superseded for the data side but still what the deployed agent reads.
 
 ## Layout
 
@@ -59,7 +55,7 @@ tests/                         offline tests (no Azure needed)
 
 ## Prerequisites
 
-Same as the reference repos - see `DEPLOYMENT_PLAN_v2.md` section 5. In short:
+Same as the reference repos (`fleet-ops-copilot`, `foundry-iq-v2`). In short:
 
 - `az` and `azd`, signed in as a **real user** (not a service principal): `az login`, `azd auth login`.
 - Python 3.11+.
@@ -122,7 +118,7 @@ Later environments use `--apply`.
 
 ### Waves 2 and 3 (private link, hosted agent, Bot Service, Teams)
 
-Follow `DEPLOYMENT_PLAN_v2.md` sections 8-10 and the ordering rules in `infra/README.md`. The important ones:
+Follow the ordering rules in `infra/README.md`. The important ones:
 
 1. **Fabric items are built from the local machine, not the jumpbox.** Wave 2 (`deploy.ps1 -Wave 2`, then `05_network_policy.py --confirm`) is therefore the **last, optional** step: it locks the workspace to private access, after which local runs against Fabric stop working. Do it only once every Fabric item is built.
 2. The Foundry account must be **public when the agent is deployed and published** (`publicNetworkAccessAtCreation = true`); `publish_teams.py` flips it back to private at the end.

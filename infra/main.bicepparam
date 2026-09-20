@@ -6,7 +6,7 @@ using './main.bicep'
 // swedencentral: hosted-agent invocation routes register within seconds there. westus
 // was observed to take 15-40+ minutes (or never) in the reference deployments, and
 // the Operations Agent is not available in eastus. Confirm Fabric capacity quota in
-// your region first (see DEPLOYMENT_PLAN_v2.md section 5) before changing this.
+// your region first (see README prerequisites) before changing this.
 param location = 'swedencentral'
 param resourceGroupName = readEnvironmentVariable('AZURE_RESOURCE_GROUP_NAME', 'rg-pdm-fabric-foundry')
 
@@ -35,7 +35,7 @@ param aiSearchResourceId = readEnvironmentVariable('AI_SEARCH_RESOURCE_ID', '')
 param azureStorageAccountResourceId = readEnvironmentVariable('AZURE_STORAGE_RESOURCE_ID', '')
 param azureCosmosDBAccountResourceId = readEnvironmentVariable('AZURE_COSMOS_RESOURCE_ID', '')
 
-// Agents are deployed from an image built with ACR Tasks (DEPLOYMENT_PLAN_v2.md 9.3).
+// Agents are deployed from an image built with ACR Tasks (README).
 param enableContainerRegistry = true
 // Must stay true through agent deploy + Teams publish; publish_teams.py flips it back.
 param publicNetworkAccessAtCreation = true
