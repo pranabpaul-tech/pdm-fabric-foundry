@@ -14,12 +14,15 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-SIGNALS = ("vibration_rms", "temp_c", "current_a", "pressure_bar")
+# Signals of the Real-Time Manufacturing Jumpstart (see docs/jumpstart-mapping.md). There is no current sensor.
+SIGNALS = ("vibration_mms", "temp_c", "pressure_bar")
+UNITS = {"vibration_mms": "mm/s", "temp_c": "degC", "pressure_bar": "bar"}
 
 RECENT_WINDOW = "30m"        # "now" = the newest reading for the asset, not the wall clock
 BASELINE_LOOKBACK = "14d"
-BASELINE_EXCLUDE = "2h"      # baseline stops this long before the newest reading, so a developing fault
-                             # cannot contaminate its own baseline
+BASELINE_EXCLUDE = "30m"     # baseline stops this long before the newest reading, so a developing fault
+                             # cannot contaminate its own baseline. The Jumpstart holds only a few hours of history;
+                             # raise this (2h-6h) once weeks of data exist so slow drifts are caught too.
 MIN_BASELINE_POINTS = 30
 MATERIAL_Z = 3.0             # |recent - baseline| must exceed 3 baseline standard deviations ...
 MATERIAL_PCT = 5.0           # ... AND be at least 5 % of the baseline mean
@@ -40,8 +43,8 @@ def recent_kql(asset_id: str) -> str:
     aggs = ", ".join(f"{s} = avg({s})" for s in SIGNALS)
     return (
         f"let a = '{a}';\n"
-        f"let tmax = toscalar(telemetry_enriched | where asset_id == a | summarize max(ts));\n"
-        f"telemetry_enriched | where asset_id == a and ts > tmax - {RECENT_WINDOW}\n"
+        f"let tmax = toscalar(pdm_telemetry() | where asset_id == a | summarize max(ts));\n"
+        f"pdm_telemetry() | where asset_id == a and ts > tmax - {RECENT_WINDOW}\n"
         f"| summarize n = count(), newest = max(ts), {aggs}"
     )
 
@@ -52,8 +55,8 @@ def baseline_kql(asset_id: str) -> str:
     aggs = ", ".join(f"avg_{s} = avg({s}), sd_{s} = stdev({s})" for s in SIGNALS)
     return (
         f"let a = '{a}';\n"
-        f"let tmax = toscalar(telemetry_enriched | where asset_id == a | summarize max(ts));\n"
-        f"telemetry_enriched | where asset_id == a and ts between (tmax - {BASELINE_LOOKBACK} .. tmax - {BASELINE_EXCLUDE})\n"
+        f"let tmax = toscalar(pdm_telemetry() | where asset_id == a | summarize max(ts));\n"
+        f"pdm_telemetry() | where asset_id == a and ts between (tmax - {BASELINE_LOOKBACK} .. tmax - {BASELINE_EXCLUDE})\n"
         f"| summarize n = count(), {aggs}"
     )
 
@@ -113,6 +116,8 @@ def build_snapshot(asset_id: str, recent_row: dict[str, Any] | None, base_row: d
         s: assess_signal(recent_row.get(s), base_row.get(f"avg_{s}"), base_row.get(f"sd_{s}"), base_n)
         for s in SIGNALS
     }
+    for s, v in signals.items():
+        v["unit"] = UNITS[s]
     abnormal = [s for s, v in signals.items() if v["status"] == "ABNORMAL"]
     unknown = [s for s, v in signals.items() if v["status"] in ("INSUFFICIENT_BASELINE", "NO_DATA")]
     snapshot.update(

@@ -94,6 +94,26 @@ def get_tenant_id() -> str:
     return result.stdout.strip()
 
 
+def _fabric_token_is_delegated(az_path: str) -> bool:
+    """True if the az CLI's Fabric access token is a delegated (human) token, judged from its claims."""
+    import base64
+    import json
+    import subprocess
+
+    result = subprocess.run(
+        [az_path, "account", "get-access-token", "--resource", "https://api.fabric.microsoft.com",
+         "--query", "accessToken", "-o", "tsv"],
+        capture_output=True, text=True, timeout=30,
+    )
+    token = result.stdout.strip()
+    if result.returncode != 0 or token.count(".") != 2:
+        return False
+    payload = token.split(".")[1]
+    claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    is_app = claims.get("idtyp") == "app" or "roles" in claims
+    return bool(claims.get("scp")) and not is_app and bool(claims.get("upn") or claims.get("unique_name"))
+
+
 def assert_delegated_identity() -> None:
     """Raise if the current credential resolves to an app-only (service principal)
     identity rather than a human's delegated one.
@@ -121,6 +141,11 @@ def assert_delegated_identity() -> None:
             timeout=20,
         )
         if result.returncode != 0 or not result.stdout.strip():
+            # Graph can answer with a Conditional Access (CAE) challenge even for a valid human session.
+            # Fall back to the same fact read from the Fabric token: delegated tokens carry `scp` and a
+            # user principal name; app-only tokens carry `roles` / idtyp=app and no `scp`.
+            if _fabric_token_is_delegated(az_path):
+                return
             raise RuntimeError(
                 "Not signed in as a delegated (human) identity. This step must run "
                 "under an operator's own `az login` session, not a service principal "
