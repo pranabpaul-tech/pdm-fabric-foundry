@@ -1,0 +1,8 @@
+// OneLake availability for the PdM tables, so the Lakehouse / ML side reads the same bytes.
+// Best-effort (setup/03_kql_schema.py only warns on failure). The Jumpstart's own tables are
+// already reachable from its Lakehouse through the shortcuts PostDeploymentNotebook creates.
+.alter-merge table downtime_raw policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table prediction_stream policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table alert_event policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table alert_disposition policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)
+.alter-merge table approval_event policy mirroring dataformat = parquet with (IsEnabled = true, TargetLatencyInMinutes = 15)

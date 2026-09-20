@@ -21,6 +21,25 @@ Predictive maintenance on **Microsoft Fabric Real-Time Intelligence** with a **F
 | Lakehouse gold tables, notebooks/ML, semantic model, Activator, Foundry IQ KB, Fabric Data Agent toolbox, lakehouse T-SQL agent, approval-gated action tools | **Not started** (plan sections 7, 9, 11) |
 | `actions/incident_store.py` | Local-file store from the reference - **does not work inside a hosted-agent container**; to be replaced by the Eventhouse-backed `approval_event` log before any write tool ships |
 
+## Real-Time Manufacturing Jumpstart (installed)
+
+The Jumpstart is installed in its own workspace `pdm-manufacturing-jumpstart` (17 items: 2 Eventstreams, Eventhouse `ManufacturingRealtimeAnalytics`,
+Lakehouse `ManufacturingData`, 6 notebooks, pipeline, semantic model, report, dashboard, `TalkToManufacturingData` Data Agent) and the PdM layer is applied
+on top of its Eventhouse. See [`docs/jumpstart-mapping.md`](docs/jumpstart-mapping.md) for the source -> PdM mapping, the data gaps and the install gotchas.
+
+```powershell
+# Python 3.10-3.13 venv (the library does not support 3.14)
+py -3.13 -m venv .venv-js ; .venv-js\Scripts\python -m pip install fabric-jumpstart
+$env:FABRIC_JUMPSTART_TOKEN_CREDENTIAL = "AzureCliCredential"
+.venv-js\Scripts\python -c "import fabric_jumpstart as j; j.install('real-time-manufacturing', workspace_id='<new workspace id>', unattended=True)"
+# then run PostDeploymentNotebook AND SimulateMachineData as separate jobs with _inlineInstallationEnabled=true (see the mapping doc)
+
+python src/pdmops/setup/03_kql_schema.py --target jumpstart      # PdM layer on the Jumpstart Eventhouse
+python src/pdmops/validate/smoke_jumpstart.py                    # verify
+```
+
+The earlier hand-built workspace (`pdm-fabric-foundry`, Eventhouse `pdmops-eventhouse`, simulator) is superseded for the data side but still what the deployed agent reads.
+
 ## Layout
 
 ```

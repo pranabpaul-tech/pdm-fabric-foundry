@@ -1,0 +1,90 @@
+// Mapping of the Jumpstart's tall sensor stream and SAP master data onto the PdM model.
+//
+// Jumpstart source shapes (verified against the live database):
+//   sensors_parsed(machine_id:int, site_id:int, sensor_id, sensor_type, measure_unit,
+//                  sensor_value:decimal, timestamp:datetime, Date, Time)  -- ONE ROW PER READING
+//     sensor_type in {temperature (Celsius), pressure (bar), vibration (mm/s)}; there is no current sensor.
+//   machines_internal / sites_internal -- SAP equipment and plant master data.
+
+// Asset dimension = SAP equipment master joined to plant. equipment_category is 'M' for every
+// machine and manufacturer is empty, so asset_class is derived from the machine name. No
+// criticality exists in the source, so none is invented here.
+.create-or-alter function with (folder = 'PdM', docstring = 'PdM asset dimension from SAP equipment + plant master data') pdm_asset_dim() {
+    machines_internal
+    | join kind=leftouter (sites_internal | project siteid, plant_name = sitename, plant_code = sap_plant_code, country) on $left.site_id == $right.siteid
+    | project asset_id = tostring(machine_id), machine_id, equipment_number, asset_name = machine_name,
+              asset_class = case(machine_name has 'Valve', 'valve', machine_name has 'Bearing', 'bearing',
+                                 machine_name has 'Motor', 'motor', machine_name has 'Gear', 'gearbox',
+                                 machine_name has 'Compressor', 'compressor', 'other'),
+              site_id, plant_name, plant_code, country, acquisition_value, currency, operation_start_date
+}
+
+// One row per machine per minute, wide. avgif keeps the pivot inside a materialized view.
+// The 1-minute view is what the anomaly function, the dashboard and the agent read; the raw
+// tall table grows several rows per second and should not be scanned for trends.
+.create-or-alter materialized-view with (backfill = true) mv_machine_1m on table sensors_parsed {
+    sensors_parsed
+    | summarize vibration_mms = avgif(todouble(sensor_value), sensor_type == 'vibration'),
+                temp_c = avgif(todouble(sensor_value), sensor_type == 'temperature'),
+                pressure_bar = avgif(todouble(sensor_value), sensor_type == 'pressure'),
+                readings = count()
+      by machine_id, bin(timestamp, 1m)
+}
+
+.create-or-alter materialized-view with (backfill = true) mv_machine_1h on table sensors_parsed {
+    sensors_parsed
+    | summarize vibration_mms = avgif(todouble(sensor_value), sensor_type == 'vibration'),
+                temp_c = avgif(todouble(sensor_value), sensor_type == 'temperature'),
+                pressure_bar = avgif(todouble(sensor_value), sensor_type == 'pressure'),
+                readings = count()
+      by machine_id, bin(timestamp, 1h)
+}
+
+// The PdM view of telemetry: 1-minute rows keyed by asset_id with names and plant attached.
+.create-or-alter function with (folder = 'PdM', docstring = '1-minute machine telemetry, wide, with asset attributes') pdm_telemetry() {
+    mv_machine_1m
+    | extend asset_id = tostring(machine_id)
+    | lookup (pdm_asset_dim() | project asset_id, asset_name, asset_class, plant_name, plant_code) on asset_id
+    | project asset_id, machine_id, asset_name, asset_class, plant_name, plant_code, ts = timestamp,
+              vibration_mms, temp_c, pressure_bar, readings
+}
+
+// Kill switch read by alert rules: alerts are ON unless the latest pdm_config row for
+// 'alerts_enabled' says 'false'.
+.create-or-alter function with (folder = 'PdM') pdm_alerts_enabled() {
+    let cur_value = toscalar(pdm_config | where key == 'alerts_enabled' | top 1 by ts desc | project tolower(value));
+    isnull(cur_value) or cur_value != 'false'
+}
+
+// Latest 1-minute state per asset.
+.create-or-alter function with (folder = 'PdM') pdm_asset_latest() {
+    pdm_telemetry()
+    | where ts > ago(1h)
+    | summarize arg_max(ts, vibration_mms, temp_c, pressure_bar, asset_name, asset_class, plant_name) by asset_id
+}
+
+// Assets that reported within the last day but not the last N minutes.
+.create-or-alter function with (folder = 'PdM') pdm_silent_assets(silent_minutes: int = 15) {
+    mv_machine_1m
+    | where timestamp > ago(1d)
+    | summarize last_seen = max(timestamp) by machine_id
+    | where last_seen < ago(silent_minutes * 1m)
+    | project asset_id = tostring(machine_id), last_seen
+}
+
+// Real-time anomaly tier: trend decomposition per asset on 1-minute vibration; returns only anomalous points.
+// The series runs from the start of REAL data (never the padded start of the lookback window) and
+// returns nothing until there are min_history of data: a detector with no history reads the first
+// data point after a flat pad as a huge jump and flags every asset.
+.create-or-alter function with (folder = 'PdM', docstring = 'Univariate vibration anomalies per asset; needs min_history of data') pdm_anomalies(lookback: timespan = 6h, threshold: real = 2.5, min_history: timespan = 30m) {
+    let data_start = toscalar(mv_machine_1m | where timestamp > ago(lookback) | summarize min(timestamp));
+    mv_machine_1m
+    | where timestamp >= data_start
+    | make-series v = avg(vibration_mms) default = real(null) on timestamp from data_start to now() step 1m by machine_id
+    | where now() - data_start >= min_history
+    | extend v = series_fill_linear(v)
+    | extend (flag, score, baseline) = series_decompose_anomalies(v, threshold, -1, 'linefit')
+    | mv-expand timestamp to typeof(datetime), v to typeof(real), flag to typeof(int), score to typeof(real), baseline to typeof(real)
+    | where flag != 0
+    | project asset_id = tostring(machine_id), ts = timestamp, vibration_mms = v, baseline, score, direction = iff(flag > 0, 'high', 'low')
+}

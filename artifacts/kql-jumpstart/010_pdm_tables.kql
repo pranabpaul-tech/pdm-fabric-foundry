@@ -1,0 +1,89 @@
+// PdM layer on top of the Real-Time Manufacturing Jumpstart's Eventhouse
+// (ManufacturingRealtimeAnalytics). Nothing here changes or replaces a Jumpstart object:
+// every name is new, functions are prefixed pdm_ and live in the 'PdM' folder.
+//
+// Applied in filename order by setup/03_kql_schema.py --target jumpstart. All commands are
+// create-merge / create-or-alter, so re-running is safe. A line starting with '.' begins a
+// command; '//' lines are dropped; a continuation line must never start with '.'.
+//
+// asset_id convention: tostring(machine_id) from the Jumpstart. SAP's equipment_number is
+// kept in pdm_asset_dim() for the work-order / notification hand-off.
+
+// Labelled stop events: the KPI backbone (MTBF, MTTR, planned vs unplanned). The Jumpstart
+// has NO downtime data: its Availability() function infers uptime from production activity.
+.create-merge table downtime_raw (
+    event_id: string,
+    asset_id: string,
+    start_ts: datetime,
+    end_ts: datetime,
+    is_planned: bool,
+    reason_code: string,
+    detected_by: string,
+    response_ts: datetime,
+    repair_start_ts: datetime,
+    repair_end_ts: datetime,
+    cost_labour: real,
+    cost_parts: real,
+    lost_units: real
+)
+
+.create-merge table prediction_stream (
+    asset_id: string,
+    ts: datetime,
+    model: string,
+    horizon_h: int,
+    p_failure: real,
+    rul_h: real,
+    rul_lo: real,
+    rul_hi: real,
+    run_id: string,
+    shadow: bool
+)
+
+// One row per alert raised. shadow=true rows are logged but never acted on.
+.create-merge table alert_event (
+    alert_id: string,
+    asset_id: string,
+    ts: datetime,
+    model: string,
+    horizon_h: int,
+    p_failure: real,
+    rul_h: real,
+    channel: string,
+    shadow: bool
+)
+
+// Append-only. disposition: confirmed_tp | false_alarm | already_known | not_actioned
+.create-merge table alert_disposition (
+    alert_id: string,
+    ts: datetime,
+    disposition: string,
+    by_user: string,
+    note: string,
+    approval_id: string,
+    source: string
+)
+
+// Append-only approval log for agent-proposed writes (pending -> approved | denied | expired).
+.create-merge table approval_event (
+    approval_id: string,
+    ts: datetime,
+    action_type: string,
+    payload: dynamic,
+    status: string,
+    decided_by: string,
+    expires_at: datetime
+)
+
+// Runtime switches, e.g. alerts_enabled (kill switch). Latest row per key wins.
+.create-merge table pdm_config (
+    key: string,
+    value: string,
+    ts: datetime
+)
+
+// The labelled downtime history and the closed-loop logs are the asset: keep ten years.
+.alter-merge table downtime_raw policy retention softdelete = 3650d recoverability = enabled
+.alter-merge table alert_event policy retention softdelete = 3650d recoverability = enabled
+.alter-merge table alert_disposition policy retention softdelete = 3650d recoverability = enabled
+.alter-merge table approval_event policy retention softdelete = 3650d recoverability = enabled

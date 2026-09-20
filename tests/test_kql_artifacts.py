@@ -73,3 +73,13 @@ def test_update_policy_targets_existing_table_and_function():
     assert "policy update" in text and "telemetry_enriched" in text
     assert '"Source": "telemetry_raw"' in text and "fn_enrich_telemetry()" in text
     assert '"IsTransactional": false' in text  # enrichment failure must never block raw ingestion
+
+
+def test_backfill_option_is_dropped_for_existing_materialized_views():
+    # Found live: re-running `.create-or-alter materialized-view with (backfill = true) X` on an existing X
+    # is rejected ("Unsupported property in materialized view alter command").
+    stmt = ".create-or-alter materialized-view with (backfill = true) mv_a on table t {\n t | summarize count() by x\n}"
+    assert schema.adapt_for_existing_views(stmt, {"mv_a"}).startswith(".create-or-alter materialized-view mv_a on table t")
+    assert "backfill" not in schema.adapt_for_existing_views(stmt, {"mv_a"})
+    assert schema.adapt_for_existing_views(stmt, set()) == stmt                # new view keeps backfill
+    assert schema.adapt_for_existing_views(".create-merge table x (a:int)", {"mv_a"}) == ".create-merge table x (a:int)"

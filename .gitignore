@@ -10,3 +10,4 @@ state.json
 .azure/
 foundry-vendored-scratch/
 *.zip
+.venv-js/
