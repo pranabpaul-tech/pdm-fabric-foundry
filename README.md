@@ -13,9 +13,11 @@ Predictive maintenance on **Microsoft Fabric Real-Time Intelligence** with a **F
 | Azure: waves 0-1 (network, F8 capacity, Key Vault, monitoring, ACR, jumpbox, vendored Foundry standard agent) | **Deployed** to `rg-pdm-fabric-foundry` (swedencentral): 45 resources, capability hosts `Succeeded`, Foundry account injected into `snet-agent`, public access still `Enabled`. Fabric capacity `pdmopsf8` (F8) was found paused once and had to be resumed |
 | Fabric: Real-Time Manufacturing Jumpstart | **Installed** in workspace `pdm-manufacturing-jumpstart` (17 items). Simulator (`SimulateMachineData`) must be run as its own job; it loops up to 2 hours |
 | Fabric: PdM layer on the Jumpstart Eventhouse | **Applied and verified** (`smoke_jumpstart.py`): 6 new tables, `pdm_asset_dim()`, `mv_machine_1m/1h`, `pdm_telemetry()`, `pdm_asset_latest()`, `pdm_silent_assets()`, `pdm_anomalies()`, `pdm_alerts_enabled()` |
-| Hosted agent `pdm-orchestrator` (version 6) | Deployed, but it read the hand-built Eventhouse, which was **deleted**. Its `query_telemetry` / `asset_snapshot` tools now fail. Re-pointing to the Jumpstart Eventhouse is deferred with the Foundry work (see `docs/jumpstart-mapping.md`) |
-| Azure waves 2-3 (Fabric private link, Bot Service + Teams) | Written, compile; **not deployed** |
-| Downtime data, Lakehouse gold tables, ML models, Activator, Foundry IQ KB, approval-gated write tools, Teams publish | **Not started** |
+| Hosted agent `pdm-orchestrator` (version 8) | **Deployed and tested** against the Jumpstart Eventhouse with `scripts/ask_agent.py`: name resolution, per-signal baseline judgement, OEE, honest "no downtime data" and unknown-machine answers. Tools: `asset_snapshot`, `query_telemetry` (read-only) |
+| Bot Service `bot-pdm-orchestrator` + Teams publish | **Deployed and published** (Shared scope, auth `BotServiceRbac`): teamsAppId `a3cf3a77-ac30-4cb0-a190-d5da9b806cb9`, deep link `https://teams.microsoft.com/l/app/a3cf3a77-ac30-4cb0-a190-d5da9b806cb9`. **Not yet tried by a person in Teams.** Foundry account left public (`--skip-network-toggle`) |
+| Operations Agent `PdM Operations Monitor` | **Created in the Jumpstart workspace** with 3 rules over the Jumpstart data. Generate Playbook, message delivery and Start are manual portal steps |
+| Azure wave 2 (Fabric private link) | Written, compiles; **not deployed**, and deliberately last: it would stop local builds reaching the workspace |
+| Downtime data, Lakehouse gold tables, ML models, Activator, Foundry IQ KB, approval-gated write tools | **Not started** |
 | `actions/incident_store.py` | Local-file store from the reference - does not work inside a hosted-agent container; to be replaced by the Eventhouse-backed `approval_event` log before any write tool ships |
 | Hand-built workspace `pdm-fabric-foundry` (Eventhouse `pdmops-eventhouse`, Operations Agent) | **Deleted** on request. `artifacts/kql/`, `setup/01-04`, `06_ops_agent.py` and `simulate_telemetry.py` targeted it and are kept only as reference |
 
@@ -145,6 +147,16 @@ Every one of these was found by asking the deployed agent real questions, not by
 5. **Fix that worked:** stop asking the model to do arithmetic. `hosted_agent/snapshot.py` computes baseline deltas, z-scores, materiality (>= 3 sigma AND >= 5 %), data age and staleness in code; the `asset_snapshot` tool returns them and the model only narrates (v6). The logic is unit-tested offline (`tests/test_snapshot.py`) with the exact failure cases.
 
 Try it: `python scripts/ask_agent.py "Triage PUMP-03: is anything wrong?" "Is PUMP-01 healthy?"`
+
+## Teams
+
+The agent is published to Microsoft Teams through Azure Bot Service (`infra/wave3-bot.bicep`, `src/pdmops/foundry/publish_teams.py`).
+Open `https://teams.microsoft.com/l/app/<teamsAppId>` (id in `state.json['teams_publish']`) as a user who holds an Azure role on the Foundry project
+(scope is `Shared`, auth scheme `BotServiceRbac`). It can also appear under "Your agents" after up to an hour. There is no Web Chat fallback for this design;
+test the agent itself with `python scripts/ask_agent.py "..."`. `Tenant` scope (any tenant member, `BotServiceTenant`) needs Microsoft 365 admin approval.
+
+The publish step needs a delegated token (your `az login`); Graph can answer with a Conditional Access challenge even after login, so
+`auth.assert_delegated_identity()` falls back to reading the Fabric token's claims.
 
 ## Safety notes
 
