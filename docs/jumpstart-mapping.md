@@ -26,7 +26,7 @@ name is new (`pdm_*` functions in folder `PdM`, `mv_machine_*` views, six new ta
 
 1. **No downtime / stop events.** The Jumpstart's `Availability()` infers uptime from production activity in a 10-minute
    window. MTBF, MTTR and the planned-vs-unplanned split cannot be computed until `downtime_raw` is fed (Eventstream, or seed data).
-2. **No current sensor.** Signals are vibration, temperature, pressure only. `snapshot.py` still lists `current_a`.
+2. **No current sensor.** Signals are vibration, temperature, pressure only; `snapshot.py`, `analysis.py` and the agent's instructions use exactly those three.
 3. **No criticality, no manufacturer, `equipment_category` is `M` for all** - nothing to weight risk by; none was invented.
 4. **Synthetic noise.** Each sensor is uniform random per reading (temperature 30-50, pressure 1-5, vibration 0.5-1.8), independent of machine type,
    so there is no real degradation signal. The simulator has a `SENSOR_BIAS` flag that would add +21 C and +3.5 mm/s to machine 103 (Gear Box,
