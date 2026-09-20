@@ -13,9 +13,10 @@ Predictive maintenance on **Microsoft Fabric Real-Time Intelligence** with a **F
 | Azure: waves 0-1 (network, F8 capacity, Key Vault, monitoring, ACR, jumpbox, vendored Foundry standard agent) | **Deployed** to `rg-pdm-fabric-foundry` (swedencentral): 45 resources, capability hosts `Succeeded`, Foundry account injected into `snet-agent`, public access still `Enabled`. Fabric capacity `pdmopsf8` (F8) was found paused once and had to be resumed |
 | Fabric: Real-Time Manufacturing Jumpstart | **Installed** in workspace `pdm-manufacturing-jumpstart` (17 items). Simulator (`SimulateMachineData`) must be run as its own job; it loops up to 2 hours |
 | Fabric: PdM layer on the Jumpstart Eventhouse | **Applied and verified** (`smoke_jumpstart.py`): 6 new tables, `pdm_asset_dim()`, `mv_machine_1m/1h`, `pdm_telemetry()`, `pdm_asset_latest()`, `pdm_silent_assets()`, `pdm_anomalies()`, `pdm_alerts_enabled()` |
-| Hosted agent `pdm-orchestrator` (version 8) | **Deployed and tested** against the Jumpstart Eventhouse with `scripts/ask_agent.py`: name resolution, per-signal baseline judgement, OEE, honest "no downtime data" and unknown-machine answers. Tools: `asset_snapshot`, `query_telemetry` (read-only) |
-| Bot Service `bot-pdm-orchestrator` + Teams publish | **Deployed and published** (Shared scope, auth `BotServiceRbac`): teamsAppId `a3cf3a77-ac30-4cb0-a190-d5da9b806cb9`, deep link `https://teams.microsoft.com/l/app/a3cf3a77-ac30-4cb0-a190-d5da9b806cb9`. **Not yet tried by a person in Teams.** Foundry account left public (`--skip-network-toggle`) |
-| Operations Agent `PdM Operations Monitor` | **Created in the Jumpstart workspace** with 3 rules over the Jumpstart data. Generate Playbook, message delivery and Start are manual portal steps |
+| Hosted agent `pdm-orchestrator` (version 11) | **Deployed and tested** with `scripts/ask_agent.py`: name resolution, per-signal baseline judgement, OEE, honest "no downtime data" / unknown-machine answers, and the **Fabric Data Agent** through a user-token toolbox (first-pass yield by site: Munich 63.7% vs about 88% elsewhere). Tools: `asset_snapshot`, `query_telemetry` (read-only), `pdm-fabric-toolbox` |
+| Fabric Data Agent toolbox | `create_toolbox.py`: project connection `fabric-dataagent-obo` (`UserEntraToken`) + toolbox `pdm-fabric-toolbox` -> the Jumpstart's `TalkToManufacturingData` MCP endpoint. Runs as the asking user, so it works from Teams or an `az login` user but not for scheduled / app-only callers. Agent identity holds `Foundry User` on the project. Calls take about 25-30 s |
+| Bot Service `bot-pdm-orchestrator` + Teams publish | **Deployed and published** (Shared scope, app version 1.0.1, auth `BotServiceRbac`): teamsAppId `a3cf3a77-ac30-4cb0-a190-d5da9b806cb9`, link `https://teams.microsoft.com/l/app/a3cf3a77-ac30-4cb0-a190-d5da9b806cb9`. **Foundry account is now private** (`publicNetworkAccess: Disabled`, still VNet-injected); Teams reaches the agent through the Bot Service's source-IP-filtered Activity Protocol route. **Not yet tried by a person in Teams** |
+| Operations Agent `PdM Operations Monitor` | **Created in the Jumpstart workspace** with 3 rules over the Jumpstart data. Delivery of its alerts to Teams is **planned** (dashed in the diagram); Generate Playbook, message delivery and Start are manual portal steps |
 | Azure wave 2 (Fabric private link) | Written, compiles; **not deployed**, and deliberately last: it would stop local builds reaching the workspace |
 | Downtime data, Lakehouse gold tables, ML models, Activator, Foundry IQ KB, approval-gated write tools | **Not started** |
 | `actions/incident_store.py` | Local-file store from the reference - does not work inside a hosted-agent container; to be replaced by the Eventhouse-backed `approval_event` log before any write tool ships |
@@ -157,6 +158,15 @@ test the agent itself with `python scripts/ask_agent.py "..."`. `Tenant` scope (
 
 The publish step needs a delegated token (your `az login`); Graph can answer with a Conditional Access challenge even after login, so
 `auth.assert_delegated_identity()` falls back to reading the Fabric token's claims.
+
+## Foundry account is private: what that changes
+
+- Direct calls (`ask_agent.py`, agent deploys, `create_toolbox.py`) from a machine outside the VNet now get `403` on the data plane. Run them from the jumpbox
+  (`az container exec ...`), or temporarily re-enable public access (`foundry_network.set_foundry_public_access(account_id, enabled=True)`), do the work, and lock it again.
+- **Deploy trap:** `update_details()` used to overwrite the agent endpoint with `responses` only, silently dropping the Activity Protocol route Teams needs.
+  `deploy_hosted_agent.py` now captures the existing endpoint config first and restores it (regression test in `tests/test_agent_guardrails.py`).
+- The Teams route cannot be probed from outside: its public exception is filtered to Bot Service / Microsoft 365 addresses. Verify with a real Teams message and the
+  Bot Service `RequestsTraffic` metric.
 
 ## Safety notes
 
