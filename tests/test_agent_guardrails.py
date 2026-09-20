@@ -57,3 +57,11 @@ def test_tool_result_carries_server_time_for_staleness_checks():
     # Found live: without it the model claimed a 35-minute-old reading was "<15 minutes old".
     text = MAIN.read_text(encoding="utf-8")
     assert '"as_of_utc"' in text and "as_of_utc" in text.split("INSTRUCTIONS", 1)[1]
+
+
+def test_deploy_preserves_the_teams_activity_route():
+    # Found live: update_details() rewrote protocol_configuration with `responses` only, dropping the
+    # Activity Protocol route Teams needs. The deploy must capture and restore it.
+    text = (MAIN.parent.parent / "deploy_hosted_agent.py").read_text(encoding="utf-8")
+    assert "prior_endpoint" in text and 'prior_protocols.get("activity")' in text
+    assert text.index("prior_endpoint: dict") < text.index("project.agents.update_details(") < text.index("Restored the Activity Protocol route")

@@ -54,6 +54,12 @@ HOSTED_AGENT_NAME = get_settings().foundry_agent_name
 SOURCE_DIR = Path(__file__).resolve().parent / "hosted_agent"
 
 
+def _toolbox_env(state: StateStore) -> dict[str, str]:
+    """TOOLBOX_NAME switches the agent's Fabric Data Agent tool on; set once create_toolbox.py has run."""
+    toolbox = state.get("toolbox") or {}
+    return {"TOOLBOX_NAME": toolbox["name"]} if toolbox.get("name") else {}
+
+
 def _zip_source(source_dir: Path) -> Path:
     zip_path = Path(tempfile.gettempdir()) / f"{HOSTED_AGENT_NAME}.zip"
     excluded = {".git", ".venv", "__pycache__", ".env"}
@@ -93,6 +99,16 @@ def _finish_deploy(state: StateStore, account_name: str, project_name: str, proj
 
     _wait_for_active(project, created)
 
+    # update_details below rewrites the endpoint's protocol configuration with `responses` only, which silently
+    # DROPS the Activity Protocol route (and so Teams) that publish_teams.py enabled earlier. Found live: after
+    # a deploy the agent still answered the Responses API but Teams could no longer reach it. Capture the
+    # existing endpoint config first and restore it afterwards.
+    prior_endpoint: dict = {}
+    try:
+        prior_endpoint = FoundryAgentRest(account_name, project_name).get_agent(HOSTED_AGENT_NAME).get("agent_endpoint") or {}
+    except Exception as exc:  # noqa: BLE001 - first deploy: the agent has no endpoint config yet
+        logger.info("No prior endpoint config to preserve (%s)", str(exc)[:120])
+
     project.agents.update_details(
         agent_name=HOSTED_AGENT_NAME,
         agent_endpoint=AgentEndpointConfig(
@@ -104,6 +120,15 @@ def _finish_deploy(state: StateStore, account_name: str, project_name: str, proj
             protocol_configuration=ProtocolConfiguration(responses=ResponsesProtocolConfiguration()),
         ),
     )
+
+    prior_protocols = prior_endpoint.get("protocol_configuration") or {}
+    if prior_protocols.get("activity"):
+        FoundryAgentRest(account_name, project_name).patch_agent(HOSTED_AGENT_NAME, {"agent_endpoint": {
+            # PATCH replaces both blocks wholesale: send everything that must survive.
+            "protocol_configuration": {"responses": {}, "activity": prior_protocols["activity"]},
+            "authorization_schemes": prior_endpoint.get("authorization_schemes") or [{"type": "Entra"}],
+        }})
+        logger.info("Restored the Activity Protocol route and auth schemes (Teams keeps working).")
 
     # publish_teams.py needs instance_identity.client_id + the activityProtocol
     # endpoint — fetch both now rather than leaving it as a manual follow-up.
@@ -165,6 +190,7 @@ def deploy(model_name: str) -> None:
                     "AZURE_AI_MODEL_DEPLOYMENT_NAME": model_name,
                     "EVENTHOUSE_QUERY_URI": query_uri,
                     "EVENTHOUSE_DATABASE_NAME": database_name,
+                    **_toolbox_env(state),
                 },
                 protocol_versions=[ProtocolVersionRecord(protocol="responses", version="2.0.0")],
             ),
@@ -203,6 +229,7 @@ def deploy_from_image(image: str, model_name: str) -> None:
                     "AZURE_AI_MODEL_DEPLOYMENT_NAME": model_name,
                     "EVENTHOUSE_QUERY_URI": query_uri,
                     "EVENTHOUSE_DATABASE_NAME": database_name,
+                    **_toolbox_env(state),
                 },
                 protocol_versions=[ProtocolVersionRecord(protocol="responses", version="2.0.0")],
             ),

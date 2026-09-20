@@ -41,6 +41,13 @@ def main() -> None:
                     print("\n  [KQL]", " ".join(str(args).split())[:400])
                 elif kind == "function_call_output":
                     print("  [RESULT]", str(item.output)[:300].replace("\n", " "))
+                elif kind not in ("message", "reasoning"):
+                    # toolbox / MCP calls surface as other item types (e.g. mcp_call)
+                    label = getattr(item, "name", None) or getattr(item, "server_label", "")
+                    print(f"\n  [{kind}] {label}", str(getattr(item, "arguments", ""))[:300].replace("\n", " "))
+                    out = getattr(item, "output", None) or getattr(item, "error", None)
+                    if out:
+                        print("  [RESULT]", str(out)[:400].replace("\n", " "))
             print("\nA:", response.output_text)
 
 

@@ -8,9 +8,11 @@ Eventhouse (ManufacturingRealtimeAnalytics) from the agent's own process with it
 - asset_snapshot(asset_id): deterministic per-asset health (baseline comparison, materiality,
   data age, staleness, OEE from the Jumpstart's own functions) computed in snapshot.py.
 - query_telemetry(kql): free-form read-only KQL for everything else.
+- the Fabric Data Agent (TalkToManufacturingData) through a Foundry toolbox, when TOOLBOX_NAME is set.
+  The toolbox connection uses the CALLER's token (user passthrough), so it works for a person talking to
+  the agent (Teams, or an az-login user) and not for an app-only caller.
 
-Not built yet: lakehouse_agent (T-SQL on the gold tables), kb_agent (Foundry IQ knowledge base), the
-Fabric Data Agent toolbox (user OBO), and approval-gated action tools.
+Not built yet: kb_agent (Foundry IQ knowledge base) and approval-gated action tools.
 
 FOUNDRY_PROJECT_ENDPOINT and AZURE_AI_MODEL_DEPLOYMENT_NAME are injected by the platform / set at
 registration time. EVENTHOUSE_QUERY_URI and EVENTHOUSE_DATABASE_NAME are set explicitly in
@@ -25,7 +27,7 @@ from typing import Annotated
 
 from agent_framework import Agent, tool
 from agent_framework.foundry import FoundryChatClient
-from agent_framework_foundry_hosting import ResponsesHostServer
+from agent_framework_foundry_hosting import FoundryToolbox, ResponsesHostServer
 from azure.identity import DefaultAzureCredential
 from azure.kusto.data import ClientRequestProperties, KustoClient, KustoConnectionStringBuilder
 from dotenv import load_dotenv
@@ -191,6 +193,21 @@ DATA (all through your tools; the manufacturing Eventhouse is the only source of
 - The sensor stream is a demonstration simulation, not real plant data. If asked how much to trust it,
   say that.
 
+FABRIC DATA AGENT (a tool from the connected toolbox, when present): a natural-language analyst over the
+plant's Lakehouse (production quality history, OEE by machine, site or product over past months, defects)
+and the same Eventhouse. Use it for HISTORICAL and cross-site questions: OEE or yield trends over weeks,
+comparing plants or products, defect counts. Do NOT use it for the health verdict of one machine right
+now - that is asset_snapshot. It runs with the asker's own Fabric permissions: if it returns an error or
+says access is denied, tell the user plainly and do not guess. Attribute its figures to "the Fabric data
+agent" instead of presenting them as your own measurements, and if it disagrees with asset_snapshot about
+current state, trust asset_snapshot and say that they differ.
+The data agent often replies with a clarifying question (a timeframe, "all machines or only active ones").
+Do NOT hand that question back to the user when a sensible default exists: ask the data agent again with
+the default made explicit and state the assumption in your answer. Defaults: comparisons and trends use
+the last 7 days; per-machine questions cover every machine in pdm_asset_dim(); one figure per site or
+machine unless a trend is asked for. Only ask the user when the choice would change the answer materially
+(for example two different years of data) and say which default you would otherwise have used.
+
 WHEN ASKED ABOUT A MACHINE (triage):
 0. FIRST call asset_snapshot(asset_id). It computes, in code, each signal's change against the
    machine's own baseline and labels it NORMAL / ABNORMAL / INSUFFICIENT_BASELINE, and reports the age
@@ -226,6 +243,9 @@ RULES:
 - If a query returns zero rows, do NOT conclude there is no data. Retry at least once against a finer
   source and a wider window, and check the newest timestamp with `pdm_telemetry() | summarize max(ts)`.
   Only say data is missing after that, and report how old the newest reading is.
+- You answer once and cannot run anything afterwards. NEVER write "please wait", "I will fetch", "I am
+  requesting" or promise results later. Report what the tools actually returned; if a tool returned no
+  numbers or said it could not access something, say exactly that, quote what it said, and stop.
 - Be concise. Lead with the recommendation, then the evidence.
 """
 
@@ -237,10 +257,18 @@ async def main() -> None:
         credential=_credential,
     )
 
+    tools: list = [asset_snapshot, query_telemetry]
+    toolbox_name = os.environ.get("TOOLBOX_NAME")
+    if toolbox_name:
+        # Only FoundryToolbox forwards the caller's identity to the Fabric MCP proxy (an inline Fabric tool
+        # always uses the container's own identity and cannot satisfy user passthrough).
+        toolbox_url = f"{os.environ['FOUNDRY_PROJECT_ENDPOINT'].rstrip('/')}/toolboxes/{toolbox_name}/mcp?api-version=v1"
+        tools.append(FoundryToolbox(_credential, url=toolbox_url, name="fabric_dataagent"))
+
     agent = Agent(
         client=client,
         instructions=INSTRUCTIONS,
-        tools=[asset_snapshot, query_telemetry],
+        tools=tools,
         # History is managed by the hosting infrastructure (conversation ID) -
         # no need for the agent itself to persist it too.
         default_options={"store": False},
